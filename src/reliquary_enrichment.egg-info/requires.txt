@@ -1,0 +1,6 @@
+psycopg[binary,pool]
+requests
+
+[dev]
+pytest
+ruff

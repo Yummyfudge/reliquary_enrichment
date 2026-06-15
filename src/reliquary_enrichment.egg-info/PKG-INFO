@@ -1,0 +1,29 @@
+Metadata-Version: 2.4
+Name: reliquary-enrichment
+Version: 0.1.0
+Summary: Claim-aware meaning layer over context_reliquary: grounded, cross-linked enrichment MCP tools.
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: psycopg[binary,pool]
+Requires-Dist: requests
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+
+# reliquary_enrichment
+
+The claim-aware **meaning layer** over the context_reliquary corpus — a reasoning model reads the
+Aflac case file and extracts structured, cross-linked, *cited* meaning so retrieval hits on meaning,
+not words.
+
+**Start here: [SCOPE.md](SCOPE.md)** — full scope, architecture, and the open decisions.
+
+This is a *new, cleanly-separated* project under the context_reliquary umbrella. It **extends** the
+proven RAG spine (`query_vector_db` MCP on mcp-hub) — it does not rebuild or touch it.
+
+Layout:
+- `mcp_server/` — the new enrichment MCP tools (get_neighbors, write_enrichment, link_events)
+- `passes/` — the multi-pass workstream (segment → discover schema → extract → link → interpret)
+- `schema/` — emergent schema on a fixed provenance spine
+- `eval/` — needle-measurement (gold-note rank via verify_rank)
+- `notes/` — working notes

@@ -1,0 +1,43 @@
+# Packaging for reliquary_enrichment — the claim-aware meaning layer's MCP tools.
+#
+# What: the pip-installable package that holds the enrichment tools
+# (write_enrichment, link_events, get_chunk, get_neighbors) + the shared
+# grounding-core. Why a package: it is editable-installed into the
+# `context-reliquary` conda env and registered onto the EXISTING context_reliquary
+# FastMCP server via `reliquary_enrichment.mcp.register_tools` (Decision D1) — one
+# server, code in this repo. src-layout mirrors the spine.
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reliquary-enrichment"
+version = "0.1.0"
+description = "Claim-aware meaning layer over context_reliquary: grounded, cross-linked enrichment MCP tools."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  # Runtime DB + judge HTTP. fastmcp is provided by the host (context-reliquary)
+  # env; we register onto its instance rather than constructing our own server.
+  "psycopg[binary,pool]",
+  "requests",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Unit tests must not touch the network or the live DB. The `integration` marker
+# gates tests that require the live judge alias / Postgres (run explicitly).
+markers = [
+  "integration: requires live judge alias and/or live Postgres (not run by default)",
+]
+addopts = "-m 'not integration'"

@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+src/reliquary_enrichment/__init__.py
+src/reliquary_enrichment.egg-info/PKG-INFO
+src/reliquary_enrichment.egg-info/SOURCES.txt
+src/reliquary_enrichment.egg-info/dependency_links.txt
+src/reliquary_enrichment.egg-info/requires.txt
+src/reliquary_enrichment.egg-info/top_level.txt
