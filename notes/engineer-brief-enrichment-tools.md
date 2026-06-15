@@ -27,6 +27,8 @@ read while declaring success. Every design choice flows from this. Test #2 in ea
 it as a permanent regression.
 
 ## 3. Build sequence
+0. **Environment** — work in a **conda** env (miniforge3 is already on mcp-hub at `~/miniforge3`);
+   **never** venv / pyenv / virtualenv (hard project standard). Create a dedicated env for the build.
 1. **`schema/` DDL** — `enrichment_records` (write_enrichment §7), `codex_entities` +
    `enrichment_links` (codex §3–4), `enrichment_meaning` (SCOPE §8). Migrations **+ a rollback**.
    Beside `claim_chunks` in the `context_reliquary` DB.
