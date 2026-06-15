@@ -21,9 +21,12 @@ CREATE TABLE IF NOT EXISTS context_reliquary.codex_entities (
     canonical          text        NOT NULL,                  -- normalized value/name (the dedupe key)
     aliases            jsonb       NOT NULL DEFAULT '[]'::jsonb,  -- observed surface forms ("manager B. Smith")
     metadata           jsonb       NOT NULL DEFAULT '{}'::jsonb,  -- e.g. parsed ISO date, role, merge history
-    first_seen_record  uuid
-        CONSTRAINT codex_entities_first_seen_fk
-            REFERENCES context_reliquary.enrichment_records (record_id),
+    -- first_seen_record is informational provenance, deliberately NOT an FK: an Entity is
+    -- materialized in the same flow as the record that first cites it, and entity_refs
+    -- must be present on the (write-once) record AT insert — an FK here would force
+    -- entity-after-record ordering and add no real integrity (code always sets this to the
+    -- record being written). Kept as a plain column. (See findings; flagged to Architect.)
+    first_seen_record  uuid,
     flagged            boolean     NOT NULL DEFAULT false,    -- uncertain dedupe/merge -> curation, never silent-merge
     created            timestamptz NOT NULL DEFAULT now(),
 

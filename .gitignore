@@ -5,3 +5,6 @@ __pycache__/
 embed_overrides.json
 enrichment_full.jsonl
 artifacts/
+src/*.egg-info/
+*.egg-info/
+.pytest_cache/
