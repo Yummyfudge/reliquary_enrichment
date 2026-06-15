@@ -158,11 +158,19 @@ class GroundingCore:
                 f"-> {resolved!r}; cross-check failed (possible corruption).",
             )
 
-        fragment = self._fragments.get(resolved)
+        return self.load_fragment(resolved)
+
+    def load_fragment(self, chunk_id: str) -> Fragment:
+        """Load a Fragment by canonical chunk_id (step 2). Miss -> REJECT fragment_not_found.
+
+        Used directly by link_events to load each record's underlying Fragment (the record
+        already carries its canonical source_chunk_id — no handle resolution needed there).
+        """
+        fragment = self._fragments.get(chunk_id)
         if fragment is None:
             raise GroundingError(
                 ReasonCode.FRAGMENT_NOT_FOUND,
-                f"no Fragment in claim_chunks for chunk_id {resolved!r}.",
+                f"no Fragment in claim_chunks for chunk_id {chunk_id!r}.",
             )
         return fragment
 
