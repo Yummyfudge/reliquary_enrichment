@@ -1,17 +1,15 @@
--- Migration 005 (up, OPTIONAL hardening) — FK enrichment_records.source_chunk_id -> claim_chunks.
+-- Migration 005 (up) — FK enrichment_records.source_chunk_id -> claim_chunks(claim_chunk_id).
 --
 -- What: a foreign key making it structurally impossible to write an Enrichment Record
---   whose source_chunk_id is not a real Fragment.
+--   whose source_chunk_id is not a real Fragment. CONFIRMED wanted by the Architect ref
+--   (2026-06-14); applied by joe_dba alongside 001-004.
 -- Why: defense-in-depth for the 89503 invariant. The grounding core ALREADY rejects a
 --   missing Fragment at the application layer (resolve+load, write_enrichment §5 steps
---   1-2), so this FK is belt-and-suspenders, not the primary guard.
+--   1-2); this FK is the belt to that suspenders — corruption can't even reach the row.
 --
--- SEPARATE / OPTIONAL because it crosses into the spine table claim_chunks and needs the
---   REFERENCES privilege on claim_chunks (distinct from content SELECT). The enrichment_ddl
---   role may not hold it — if this migration errors on privilege, SKIP it; the app-layer
---   guard stands. Requires claim_chunks.claim_chunk_id to carry a PK/UNIQUE constraint.
---
--- ADDITIVE (a constraint). Down in 005_enrichment_records_fragment_fk.down.sql (Joe).
+-- Kept as a SEPARATE migration only to isolate the one cross-reference into the spine
+--   table claim_chunks (which carries a PK on claim_chunk_id). ADDITIVE (a constraint).
+--   Down in 005_enrichment_records_fragment_fk.down.sql.
 
 SET search_path TO context_reliquary;
 

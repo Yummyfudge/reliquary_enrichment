@@ -28,13 +28,16 @@ container is **being registered by the Architect** before acceptance. Unit-build
 integration/acceptance waits on that wiring. _Why:_ the judge was down at review time (:8082
 refused, no alias); the interface seam unblocks TDD without it.
 
-**D3. DB access → additive DDL via a scoped role; destructive ops to Joe.**
-Apply **additive** DDL to live `context_reliquary` — `CREATE TABLE` (the four enrichment
-tables), `CREATE INDEX`, `ADD COLUMN` — plus `information_schema` reads, connecting as a scoped
-**`enrichment_ddl`** role (Architect provisioning) that **cannot** read `claim_chunks` content
-or `DROP`/`GRANT`. Spine tables untouched. **Every migration ships a matching rollback** in
-`schema/`. Any `DROP`/`TRUNCATE`/`GRANT`/`REVOKE`: **write the SQL, do not apply — hand to Joe.**
-Write the DDL now; the role + cert land before apply.
+**D3. DB access → engineer WRITES the DDL; the Architect APPLIES it. Engineer never touches prod.**
+_(Superseded the earlier scoped-role plan — Architect ref, 2026-06-14.)_ The medical corpus
+stays walled off: the engineer **never** queries or mutates live `context_reliquary`. Write every
+migration **+ matching rollback** into `schema/` — `CREATE TABLE` (the four enrichment tables),
+`CREATE INDEX`, `ADD COLUMN`, the confirmed `source_chunk_id → claim_chunks` FK. The Architect
+applies the additive DDL as **`joe_dba`**. Anything destructive (`DROP`/`TRUNCATE`) or
+permissions (`GRANT`/`REVOKE`): write the SQL, **Joe applies**. The exact `claim_chunks` schema
+was provided by reference (no prod query needed) — see findings B1/B2; `embedding_qwen3` is
+`vector(4096)`, the space `enrichment_meaning.embedding` targets. Engineer validates all DDL on a
+local **ephemeral scratch Postgres** (no claim content) — never prod.
 
 **D4. Read tools → build both this pass.**
 Build `get_chunk` and `get_neighbors` (read-only, auto-approve), minting **Chunk Handles**

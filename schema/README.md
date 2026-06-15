@@ -2,8 +2,10 @@
 
 The four enrichment tables live in the **`context_reliquary`** schema, next to `claim_chunks`
 (brief §3.1). All DDL here is **additive** (`CREATE TABLE/INDEX/FUNCTION/TRIGGER`,
-`ADD CONSTRAINT`) per **Decision D3** and is applied by the engineer as the scoped
-**`enrichment_ddl`** role. Every `*.up.sql` has a matching `*.down.sql`.
+`ADD CONSTRAINT`). Per **Decision D3** the **engineer WRITES** these migrations and validates
+them on a local scratch Postgres; the **Architect APPLIES** them to live `context_reliquary` as
+**`joe_dba`**. The engineer never touches prod (the corpus stays walled off). Every `*.up.sql`
+has a matching `*.down.sql`.
 
 ## Apply order (up)
 ```
@@ -17,13 +19,16 @@ Rollback runs in **reverse**: `005 → 003 → 002 → 001` (004 is independent)
 write-once guard function is dropped by `001.down` (the last teardown step) — by then both
 triggers are gone (each `DROP TABLE` removes its own trigger).
 
-## Two roles — why
-| Role | Used by | Can | Cannot |
-|---|---|---|---|
-| `enrichment_ddl` | the engineer, to apply migrations | CREATE the enrichment objects, `information_schema` reads | read `claim_chunks` content, `DROP`/`GRANT` |
-| `context_reliquary_app` (runtime) | the live MCP tools | read `claim_chunks`, SELECT/INSERT enrichment tables (after grants) | UPDATE/DELETE records & links (write-once) |
+## Roles — who does what
+| Role | Used by | Notes |
+|---|---|---|
+| `joe_dba` | the Architect, to APPLY migrations | full privileges; runs `001-005.up.sql` + `grants.runtime.sql` |
+| `context_reliquary_app` (runtime) | the live MCP tools | reads `claim_chunks`, SELECT/INSERT enrichment tables (after grants); **no** UPDATE/DELETE on records & links (write-once) |
 
-## Hand to Joe (NOT applied by the engineer — D3)
+The engineer applies nothing to prod — only validates on an ephemeral scratch Postgres.
+
+## For the Architect / Joe to apply
+- **`001-005.up.sql`** — the additive schema (applied as `joe_dba`).
 - **`grants.runtime.sql`** — grants the runtime app role SELECT/INSERT on the new tables
   (and UPDATE on `codex_entities` only). **The tools cannot run live until this is applied.**
 - **All `*.down.sql`** — destructive (`DROP`); applied only on an intentional rollback.

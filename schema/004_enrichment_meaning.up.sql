@@ -7,24 +7,34 @@
 --   its claim_meaning ("supervisor reversed the prior approval ...") embeds near the
 --   user's question.
 --
--- SCOPE NOTE — the embedding column is intentionally DEFERRED. The Qwen3 cutover is not
---   yet deployed to the RAG MCP (still BGE-1024 there) and the target vector dimension
---   is unsettled (brief §4, §7: "do not block on embedding"). Baking in a wrong
---   dimension would be costly to undo. The `embedding` column + its HNSW index land in a
---   SEPARATE migration once the dimension is pinned — see 004b_enrichment_meaning_embedding.up.sql.
+-- EMBEDDING: `embedding vector(4096)` — the SAME space as claim_chunks.embedding_qwen3
+--   (Architect ref, 2026-06-14). Requires the `vector` extension (already enabled — the
+--   corpus uses it). Embedding POPULATION stays a separate track (brief §7); the column
+--   is created now so the writer can fill it when that track lands.
 --
--- ADDITIVE ONLY (D3). Down-migration in 004_enrichment_meaning.down.sql, applied by Joe.
+-- ⚠️ INDEX DEFERRED — NOT a bug: pgvector's HNSW/IVFFlat ANN indexes cap at 2000 dims
+--   for `vector` (4000 for `halfvec`); 4096 exceeds both. claim_chunks.embedding_qwen3 is
+--   the same 4096-dim space, so the meaning index must mirror whatever ANN strategy the
+--   corpus uses there (halfvec cast, brute-force scan, or none). Resolve WITH the embedding
+--   track — see findings. A premature CREATE INDEX hnsw here would simply error.
+--
+-- ADDITIVE ONLY (D3). Down-migration in 004_enrichment_meaning.down.sql, applied by Architect.
 
-SET search_path TO context_reliquary;
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Include public so the `vector` type (extension installed in public) resolves; the
+-- enrichment table itself is created in context_reliquary (first on the path).
+SET search_path TO context_reliquary, public;
 
 CREATE TABLE IF NOT EXISTS context_reliquary.enrichment_meaning (
-    meaning_id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_chunk_id     uuid        NOT NULL,                  -- the Fragment this meaning summarizes
-    claim_meaning       text        NOT NULL,                  -- interpreted significance (what we embed)
-    questions_answered  jsonb       NOT NULL DEFAULT '[]'::jsonb,  -- the questions this Fragment answers
-    -- embedding        vector(N)   -- DEFERRED: added in 004b once the Qwen3 dimension is pinned.
-    created             timestamptz NOT NULL DEFAULT now()
+    meaning_id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_chunk_id     uuid          NOT NULL,                  -- the Fragment this meaning summarizes
+    claim_meaning       text          NOT NULL,                  -- interpreted significance (what we embed)
+    questions_answered  jsonb         NOT NULL DEFAULT '[]'::jsonb,  -- the questions this Fragment answers
+    embedding           vector(4096),                            -- Qwen3 space (== claim_chunks.embedding_qwen3); populated later
+    created             timestamptz   NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_enrichment_meaning_source_chunk
     ON context_reliquary.enrichment_meaning (source_chunk_id);
+-- No ANN index on `embedding` yet — see the 4096-dim note above.
