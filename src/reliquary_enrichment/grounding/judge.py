@@ -27,6 +27,7 @@ from reliquary_enrichment.grounding.types import (
     ReasonCode,
     Verdict,
 )
+from reliquary_enrichment.llm_http import LLMTimeout, post_json
 
 
 class GroundingJudge(Protocol):
@@ -105,11 +106,15 @@ class LiteLLMGroundingJudge:
         model: str = JUDGE_MODEL_ALIAS,
         version: str = "qwen2.5-14b-q6",
         timeout: float = 60.0,
+        max_tokens: int = 512,
+        deadline_s: float = 90.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._version = version
         self._timeout = timeout
+        self._max_tokens = max_tokens   # judge output is small JSON; cap it + bound the call
+        self._deadline_s = deadline_s
         self._endpoint = f"{self._base_url}/v1/chat/completions"
 
     @property
@@ -140,19 +145,17 @@ class LiteLLMGroundingJudge:
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0,
+            "max_tokens": self._max_tokens,
             "response_format": {"type": "json_object"},
         }
         try:
-            resp = requests.post(
-                self._endpoint,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=self._timeout,
+            body = post_json(
+                self._endpoint, payload,
+                read_timeout=self._timeout, total_deadline=self._deadline_s,
             )
-            resp.raise_for_status()
-            body = resp.json()
             return body["choices"][0]["message"]["content"]
-        except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
+        except (LLMTimeout, requests.RequestException, KeyError, IndexError, ValueError) as exc:
+            # Fail CLOSED: a judge we can't read bounces the record (run continues).
             raise GroundingError(
                 ReasonCode.JUDGE_UNAVAILABLE,
                 f"judge call failed ({self._endpoint}, attempt {attempt + 1}): {exc}",

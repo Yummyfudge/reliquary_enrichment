@@ -82,6 +82,7 @@ class ProbeRunner:
         schema: str,
         workstream_id: str | None = None,
         clock=time.monotonic,
+        progress=None,
     ) -> None:
         self._extractor = extractor
         self._write = write_service
@@ -91,27 +92,54 @@ class ProbeRunner:
         self._schema = schema
         self._ws = workstream_id or f"probe-{label}"
         self._clock = clock
+        self._progress = progress  # Callable[[str], None] | None — heartbeat sink
+
+    def _emit(self, line: str) -> None:
+        if self._progress:
+            self._progress(line)
+
+    def _line(self, i: int, total: int, cid: str, start: float, detail: str) -> str:
+        elapsed = self._clock() - start
+        eta = (elapsed / i) * (total - i) if i else 0.0
+        return (f"{time.strftime('%H:%M:%S')} [{i}/{total}] {cid[:8]} | {detail} | "
+                f"elapsed {elapsed/60:.0f}m eta ~{eta/60:.0f}m")
 
     def run(self, chunk_ids: list[str]) -> RunLog:
         log = RunLog(
             label=self._label, candidate_model=self._candidate_model,
             schema=self._schema, chunk_ids=list(chunk_ids), started_at=self._clock(),
         )
-        for cid in chunk_ids:
+        total = len(chunk_ids)
+        self._emit(f"START {total} chunks | model={self._candidate_model} schema={self._schema}")
+        for i, cid in enumerate(chunk_ids, 1):
             got = self._read.get_chunk(cid, workstream_id=self._ws)
             if not got.get("ok"):
                 log.chunks_missing += 1
+                self._emit(self._line(i, total, cid, log.started_at, "MISSING fragment"))
                 continue
             log.chunks_seen += 1
             handle, text = got["chunk_handle"], got["text"]
             try:
                 proposals = self._extractor.extract(text)
-            except Exception:  # one chunk's model/HTTP failure must not kill the run
+            except Exception as exc:  # timeout/HTTP on one chunk -> log + SKIP, never kill
                 log.extract_errors += 1
+                self._emit(self._line(i, total, cid, log.started_at,
+                                      f"EXTRACT FAIL ({type(exc).__name__}) — skipped"))
                 continue
+            before = len(log.attempts)
+            t0 = self._clock()
             for p in proposals:
                 log.attempts.append(self._attempt(cid, handle, text, p))
+            chunk = log.attempts[before:]
+            g = sum(1 for a in chunk if a.ok)
+            miss = sum(1 for a in chunk if not a.located)
+            self._emit(self._line(
+                i, total, cid, log.started_at,
+                f"{len(proposals)} props | {g} grounded {len(chunk)-g-miss} bounced {miss} miss "
+                f"| {self._clock()-t0:.0f}s | total {log.records_written} recs"))
         log.finished_at = self._clock()
+        self._emit(f"DONE {log.chunks_seen} chunks seen, {log.records_written} records, "
+                   f"{log.extract_errors} extract-fails, {log.wall_seconds/60:.0f}m")
         return log
 
     def _attempt(self, chunk_id, handle, text, p) -> Attempt:

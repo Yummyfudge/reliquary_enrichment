@@ -90,13 +90,26 @@ def execute_probe(
             entity_resolver=EntityResolver(PostgresEntityStore(schema=schema)),
         )
         read_service = ReadTools(fragment_reader=reader, handle_map=handle_map)
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        # Live heartbeat: tail -f probe/results/<label>/progress.log to watch progress + ETA;
+        # the last line shows which chunk is in flight, so a stall is obvious.
+        progress_file = (out / "progress.log").open("a", buffering=1)
+
+        def _progress(line: str) -> None:
+            progress_file.write(line + "\n")
+            print(line, flush=True)  # also into run.sh's log
+
         runner = ProbeRunner(
             extractor=extractor or CandidateExtractor(model=candidate_model),
             write_service=write_service, read_service=read_service,
             label=label, candidate_model=candidate_model, schema=schema,
+            progress=_progress,
         )
-        run_log = runner.run(chunk_ids)
-        out = Path(out_dir)
+        try:
+            run_log = runner.run(chunk_ids)
+        finally:
+            progress_file.close()
         run_log.persist(out)
         card = score(schema, run_log)
         (out / "scorecard.json").write_text(json.dumps(card.as_dict(), indent=2))

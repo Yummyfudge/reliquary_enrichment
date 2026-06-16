@@ -1,0 +1,20 @@
+[loop] ===== candidate: qwen2.5-72b =====
+[loop] swapping big-thinker -> PROFILE=qwen2.5-72b on llm-lxc
+sed: couldn't open temporary file /home/joe/lanes/lanes/big-thinker/sedDU7aRa: Permission denied
+lane 'big-thinker' down
+6ce83098f96a046f27b34a53fa5686457b863db496b0180d4ed7c52476c78c3e
+lane 'big-thinker' [qwen2.5-72b / llamacpp] -> :8000  gpus=0,1,2  mem=0.90
+watch it come up:  lane logs big-thinker
+[loop] waiting for big-thinker /health (timeout 600s)
+[loop] big-thinker healthy after 10s
+[run.sh] candidate=qwen2.5-72b api_alias=big-thinker label=qwen2_5_72b
+[loop] === restoring default PROFILE=qwen2.5-72b ===
+[loop] swapping big-thinker -> PROFILE=qwen2.5-72b on llm-lxc
+sed: couldn't open temporary file /home/joe/lanes/lanes/big-thinker/sedMSubvn: Permission denied
+lane 'big-thinker' down
+05f5a6d084121d40671fcff047c8925684034c573d78524708073088351658b8
+lane 'big-thinker' [qwen2.5-72b / llamacpp] -> :8000  gpus=0,1,2  mem=0.90
+watch it come up:  lane logs big-thinker
+[loop] waiting for big-thinker /health (timeout 600s)
+[loop] big-thinker healthy after 10s
+[loop] default qwen2.5-72b restored and healthy

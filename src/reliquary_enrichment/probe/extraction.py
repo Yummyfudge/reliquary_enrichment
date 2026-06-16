@@ -16,11 +16,14 @@ import os
 import re
 from dataclasses import dataclass, field
 
-import requests
-
 from reliquary_enrichment.grounding.judge import LITELLM_BASE_URL
+from reliquary_enrichment.llm_http import post_json
 
 CANDIDATE_MODEL: str = os.getenv("PROBE_CANDIDATE_MODEL", "big-thinker")
+# Bounds for the candidate call (root-cause fix for the 2h hang): cap generation + a hard
+# total deadline. A chunk's JSON array of proposals fits comfortably in ~2k tokens.
+CANDIDATE_MAX_TOKENS: int = int(os.getenv("PROBE_CANDIDATE_MAX_TOKENS", "2048"))
+CANDIDATE_DEADLINE_S: float = float(os.getenv("PROBE_CANDIDATE_DEADLINE_S", "180"))
 
 _SYSTEM = (
     "You extract grounded facts from a single chunk of an insurance claim file. For each "
@@ -160,17 +163,21 @@ class CandidateExtractor:
         *,
         model: str = CANDIDATE_MODEL,
         base_url: str = LITELLM_BASE_URL,
-        timeout: float = 180.0,
+        max_tokens: int = CANDIDATE_MAX_TOKENS,
+        deadline_s: float = CANDIDATE_DEADLINE_S,
     ) -> None:
         self._model = model
         self._endpoint = f"{base_url.rstrip('/')}/v1/chat/completions"
-        self._timeout = timeout
+        self._max_tokens = max_tokens
+        self._deadline_s = deadline_s
 
     @property
     def model(self) -> str:
         return self._model
 
     def extract(self, chunk_text: str) -> list[ExtractionProposal]:
+        """Call the candidate under a hard deadline. Raises LLMTimeout/RequestException on
+        failure — the runner catches it, logs, and SKIPS the chunk (never kills the run)."""
         system, user = build_extraction_messages(chunk_text)
         payload = {
             "model": self._model,
@@ -179,11 +186,10 @@ class CandidateExtractor:
                 {"role": "user", "content": user},
             ],
             "temperature": 0,
+            "max_tokens": self._max_tokens,
         }
-        resp = requests.post(
-            self._endpoint, json=payload,
-            headers={"Content-Type": "application/json"}, timeout=self._timeout,
+        body = post_json(
+            self._endpoint, payload,
+            read_timeout=min(self._deadline_s, 120.0), total_deadline=self._deadline_s,
         )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
-        return parse_proposals(content)
+        return parse_proposals(body["choices"][0]["message"]["content"])
