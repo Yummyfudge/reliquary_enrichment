@@ -2,6 +2,8 @@ from __future__ import annotations
 
 """Unit tests for probe scoring — smoking-gun, cross-context, rate math (no DB)."""
 
+import pytest
+
 from reliquary_enrichment.probe.runner import Attempt, RunLog
 from reliquary_enrichment.probe.scoring import (
     GOLD_CHUNK_ID,
@@ -27,7 +29,25 @@ def test_smoking_gun_positive():
     rec = _rec(GOLD_CHUNK_ID, actor="B. Smith",
                span="B. Smith reversed the long COVID removal back to Mental Health limitation")
     hit, detail = smoking_gun([rec])
-    assert hit is True and detail["signals"]["reversal"] and detail["signals"]["condition_swap"]
+    assert hit is True and detail["signals"]["reversal_direction"] and detail["signals"]["condition_swap"]
+
+
+@pytest.mark.parametrize("span", [
+    "B. Smith reverted the long COVID removal to a Mental Health limitation",        # reverted
+    "Smith placed the claim back to the Mental Health limitation",                   # placed...back to
+    "Smith reinstated the Mental Health limitation after the long COVID removal",    # reinstated
+    "Smith overturned the long COVID removal, Mental Health limitation restored",    # overturned/restored
+])
+def test_smoking_gun_broadened_reversal_synonyms_no_false_negative(span):
+    # The decider must FIRE on a reversal phrased without the literal "revers" (no false-negative).
+    hit, detail = smoking_gun([_rec(GOLD_CHUNK_ID, actor="Smith", span=span)])
+    assert hit is True and detail["signals"]["reversal_direction"] is not None
+
+
+def test_smoking_gun_no_reversal_term_is_negative():
+    # actor + condition present but NO undo/restore direction -> not the reversal -> no hit.
+    assert smoking_gun([_rec(GOLD_CHUNK_ID, actor="B. Smith",
+                             span="B. Smith reviewed the long COVID Mental Health limitation")])[0] is False
 
 
 def test_smoking_gun_requires_grounded():

@@ -33,6 +33,15 @@ Keeps crown-jewel content out of the engineer's path (mirrors the DB-write split
 `codex_entities` referenced by records on DIFFERENT source chunks (extraction-only). `link_events`
 (Pass-3) proposing is **v2**, out of this probe.
 
+**Probe blessed (Architect, 2026-06-16).** Vetted: the `record_type` fix (correct — it was
+demanding the category label in-span), quote-pointing (invariant intact, `write_enrichment`
+contract untouched), scoring. Mapping confirmed: `big-thinker` → `qwen2.5-72b`; both candidate
+profiles present; `judge` alias live. **Hardening applied:** `smoking_gun` no longer keys on the
+literal `"revers"` — broadened to a semantic undo/restore set (`REVERSAL_TERMS`: reverted /
+placed back / reinstated / restored / overturned / returned to / …), still gated by actor +
+condition so loose terms can't false-positive (+5 synonym tests). Architect freezes the slice as
+soon as Joe applies `probe_role.sql`.
+
 ---
 
 ## 2026-06-14 — Architect (via PO Joe): the four build-readiness decisions

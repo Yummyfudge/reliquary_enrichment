@@ -17,6 +17,25 @@ from reliquary_enrichment.postgres.connection import connect, qualified
 # chunk_type "Medical Records Request"). The smoking-gun decider keys on this chunk.
 GOLD_CHUNK_ID = "89503c71-5ca2-424b-9386-6698a8337dc3"
 
+# Reversal/restoration DIRECTION — the prior change was undone and the claim put BACK to the
+# Mental Health limitation. Broadened from the literal "revers" (Architect, 2026-06-16) so a
+# candidate phrasing it "reverted" / "placed back" / "reinstated" / "returned to" doesn't
+# false-negative the decider. Substring match, lowercased; gated by actor + condition so loose
+# terms ("back to") can't false-positive on their own.
+REVERSAL_TERMS = (
+    "revers",      # reversed / reversal / reverse
+    "revert",      # reverted / reverting / reversion
+    "reinstat",    # reinstated / reinstatement
+    "restor",      # restored / restoration
+    "overturn",    # overturned
+    "rescind",     # rescinded
+    "reappl",      # reapplied / re-applied
+    "undo", "undone",
+    "return",      # returned / returning the claim to ...
+    "placed back", "put back", "moved back", "changed back", "switched back",
+    "back to", "back under",
+)
+
 
 @dataclass(slots=True)
 class ScoreCard:
@@ -70,12 +89,13 @@ def smoking_gun(records: list[dict]) -> tuple[bool, dict]:
         if verdict != "grounded":
             continue
         text = _haystack(rec)
+        matched_term = next((t for t in REVERSAL_TERMS if t in text), None)
         signals = {
             "actor_smith": "smith" in text,
-            "reversal": "revers" in text,
+            "reversal_direction": matched_term,   # which undo/restore term matched (or None)
             "condition_swap": ("long covid" in text) or ("mental health" in text),
         }
-        if all(signals.values()):
+        if signals["actor_smith"] and matched_term and signals["condition_swap"]:
             return True, {"record_id": rec.get("record_id"), "signals": signals}
     return False, {"record_id": None, "signals": {}}
 
