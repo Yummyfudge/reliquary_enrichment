@@ -1,0 +1,5 @@
+# PLACEHOLDER — not yet frozen. The Architect freezes this fixture (Decision P3):
+#   run probe/slice/build_slice.sql as the read-only `probe` role, then commit the
+#   resulting chunk_id list HERE (one UUID per line, '#' comments allowed).
+# The gold note is always included as the smoking-gun anchor:
+89503c71-5ca2-424b-9386-6698a8337dc3

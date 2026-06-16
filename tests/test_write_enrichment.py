@@ -216,6 +216,15 @@ def test_entity_alias_recorded_on_variant_surface_form():
 
 
 # schema validation -------------------------------------------------------------------
+def test_judged_claim_excludes_record_type_includes_values():
+    # Regression: record_type must NOT be in the grounded claim (it's a label, not a value
+    # the span must literally contain). Surfaced by the extraction probe vs the real judge.
+    from reliquary_enrichment.write_enrichment import _validate, render_record_claim
+    claim = render_record_claim(_validate(base_payload("F1", actor="B. Smith", event_date="2025-02-18")))
+    assert "record_type" not in claim
+    assert "B. Smith" in claim and "2025-02-18" in claim
+
+
 @pytest.mark.parametrize("bad", [
     {"tier": "guess"},
     {"record_type": ""},

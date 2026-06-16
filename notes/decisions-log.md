@@ -5,6 +5,36 @@ it, and the why. Pairs with `findings-build-readiness.md` (the questions these a
 
 ---
 
+## 2026-06-16 — Architect (via PO Joe): extraction-probe decisions (P1-P4)
+
+**P1. Probe shape → candidate extracts, judge fixed.** The candidate (qwen2.5-72b /
+qwen3-14b) is the extraction agent: read chunk → propose records (offsets + fields +
+actor/date); `write_enrichment` + the fixed Qwen2.5-14B `judge` is the write boundary. We
+score the **candidate's extraction**, never the judge. Invariant unchanged.
+
+**P2. Deploy → SPLIT.** Run the probe on **mcp-hub** (candidate via LiteLLM `:4000`, DB via
+Postgres `:5432`, both over LAN). **SSH into `llm-lxc` (192.168.1.120)** for lane swaps (NOT
+llm-db). Joe cuts the ssh key mcp-hub→llm-lxc per the key standard. Lane-swap primitive
+(`audition_loop.sh`'s):
+```
+ssh llm-lxc "sed -i 's/^PROFILE=.*/PROFILE=<cand>/' /home/joe/lanes/lanes/big-thinker/lane.env; \
+             /home/joe/lanes/bin/lane down big-thinker; /home/joe/lanes/bin/lane up big-thinker"
+# then poll /health on :8000; restore PROFILE=qwen2.5-72b on a trap at the end.
+```
+The candidate serves on the stable **`big-thinker`** LiteLLM alias (the underlying PROFILE
+swaps). The probe driver calls `big-thinker`; `probe_loop.sh` swaps what it points to.
+
+**P3. Slice freeze → engineer writes the builder; Architect freezes it.** Engineer commits
+the slice-builder (seed `89503c71…` + the reversal web terms); the Architect runs it once
+under the read-only `probe` role and commits the content-free `chunk_ids.txt` (UUIDs only).
+Keeps crown-jewel content out of the engineer's path (mirrors the DB-write split).
+
+**P4. Cross-context (v1) → shared entities across chunks.** Score cross-context as shared
+`codex_entities` referenced by records on DIFFERENT source chunks (extraction-only). `link_events`
+(Pass-3) proposing is **v2**, out of this probe.
+
+---
+
 ## 2026-06-14 — Architect (via PO Joe): the four build-readiness decisions
 
 **D1. Code placement → separate package + thin spine hook.**

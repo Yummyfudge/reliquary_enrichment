@@ -9,11 +9,31 @@ be targeted in integration tests — the engineer never points this at prod.
 """
 
 import os
+import re
 from contextlib import contextmanager
 from typing import Iterator
 
 import psycopg
 from psycopg.rows import dict_row
+
+# Default schema for enrichment WRITES. The probe overrides this per run to a throwaway
+# probe_<label> schema (isolation); claim_chunks reads always stay in context_reliquary.
+DEFAULT_WRITE_SCHEMA: str = "context_reliquary"
+
+_IDENT = re.compile(r"^[a-z_][a-z0-9_]*$")
+
+
+def qualified(schema: str, table: str) -> str:
+    """Return a validated ``schema.table`` identifier.
+
+    Schema/table names are operator-controlled (never model input), but we still validate
+    them against a strict identifier pattern so a malformed schema (e.g. a probe label)
+    can never inject SQL. Raises ValueError on anything that isn't a plain lowercase ident.
+    """
+    for part in (schema, table):
+        if not _IDENT.match(part):
+            raise ValueError(f"invalid SQL identifier {part!r} (expected ^[a-z_][a-z0-9_]*$)")
+    return f"{schema}.{table}"
 
 try:  # the spine is co-installed in the runtime env; fall back to env-only for tests.
     from context_reliquary import config as _cr

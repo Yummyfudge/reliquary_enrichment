@@ -113,17 +113,25 @@ def render_record_claim(p: _Payload) -> str:
     Lists exactly what the model asserts — actor, date, each field — so the judge can
     name any value that drifts. The judge sees this PLUS the code-sliced span, never the
     model's free prose about the source.
+
+    NOTE: ``record_type`` is DELIBERATELY excluded — it is the model's category label
+    ("status_change"), not a value the span must literally contain. Including it made the
+    judge bounce every fact whose record_type words weren't in the span (surfaced by the
+    extraction probe against the real judge; the fake-judge unit tests couldn't catch it).
+    Only real asserted values (actor / date / fields / relevance) are grounded.
     """
-    parts = [f"record_type={p.record_type}"]
+    parts = []
     if p.actor:
-        parts.append(f"actor={p.actor}")
+        parts.append(f"actor: {p.actor}")
     if p.event_date:
-        parts.append(f"event_date={p.event_date}")
+        parts.append(f"event_date: {p.event_date}")
     if p.fields:
-        parts.append(f"fields={json.dumps(p.fields, ensure_ascii=False, sort_keys=True)}")
+        parts.append(f"details: {json.dumps(p.fields, ensure_ascii=False, sort_keys=True)}")
     if p.tier is Tier.INTERPRETATION and p.claim_relevance:
-        parts.append(f"claim_relevance={p.claim_relevance}")
-    return "; ".join(parts)
+        parts.append(f"relevance: {p.claim_relevance}")
+    # Degenerate case (no asserted values): describe the record type without demanding it
+    # appear literally in the span.
+    return "; ".join(parts) if parts else f"the span records a {p.record_type} event"
 
 
 class WriteEnrichment:
