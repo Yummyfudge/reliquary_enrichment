@@ -22,9 +22,14 @@ if [ "$#" -gt 0 ]; then CANDIDATES=("$@"); else CANDIDATES=(qwen2.5-72b qwen3-14
 swap_lane() {  # $1 = PROFILE to load on the lane
   local profile="$1"
   echo "[loop] swapping $LANE -> PROFILE=$profile on $SWAP_HOST"
-  ssh "$SWAP_HOST" \
-    "sed -i 's/^PROFILE=.*/PROFILE=${profile}/' /home/joe/lanes/lanes/${LANE}/lane.env; \
-     /home/joe/lanes/bin/lane down ${LANE}; /home/joe/lanes/bin/lane up ${LANE}"
+  # lane.env is owner-writable but its DIRECTORY is root-owned, so `sed -i` (which needs a
+  # temp file in the dir) and `lane swap` (also seds) fail. Rewrite the file content in place
+  # instead — truncate+write the existing inode, no dir temp — then cycle the lane.
+  ssh "$SWAP_HOST" "
+    f=/home/joe/lanes/lanes/${LANE}/lane.env
+    new=\$(sed 's/^PROFILE=.*/PROFILE=${profile}/' \"\$f\") && printf '%s\n' \"\$new\" > \"\$f\"
+    /home/joe/lanes/bin/lane down ${LANE}; /home/joe/lanes/bin/lane up ${LANE}
+  "
 }
 
 health_wait() {  # poll the lane's /health until ready or timeout
