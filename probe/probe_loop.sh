@@ -47,9 +47,23 @@ restore_default() {
 }
 trap restore_default EXIT   # ALWAYS restore, even on error/Ctrl-C
 
+lane_profile() {  # the profile the lane is ACTUALLY configured to serve
+  ssh "$SWAP_HOST" "grep -h '^PROFILE=' /home/joe/lanes/lanes/${LANE}/lane.env | cut -d= -f2" \
+    2>/dev/null | tr -d '[:space:]'
+}
+
 for cand in "${CANDIDATES[@]}"; do
   echo "[loop] ===== candidate: $cand ====="
   if ! swap_lane "$cand"; then echo "[loop] swap failed for $cand — skipping"; continue; fi
+  # GUARD: the swap writes a root-owned lane.env; if it didn't take, the lane still serves the
+  # previous model. NEVER run a candidate against the wrong model — verify, else skip loudly.
+  actual="$(lane_profile)"
+  if [ "$actual" != "$cand" ]; then
+    echo "[loop] !! SWAP DID NOT TAKE: lane '$LANE' serves '$actual', not '$cand' — SKIPPING."
+    echo "[loop]    (lane.env is root-owned; joe can't change PROFILE. Needs Joe: make"
+    echo "[loop]     /home/joe/lanes/lanes/${LANE}/lane.env writable by joe, or pre-swap, or sudo.)"
+    continue
+  fi
   if ! health_wait;       then echo "[loop] $cand never became healthy — skipping"; continue; fi
   if ! "$REPO/probe/run.sh" "$cand" "$API_ALIAS"; then
     echo "[loop] run.sh failed for $cand — skipping"; continue
