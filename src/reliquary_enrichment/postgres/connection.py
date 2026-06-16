@@ -66,8 +66,15 @@ def connection_kwargs() -> dict:
     if password:  # scratch/password auth
         kwargs["password"] = password
     if kwargs["sslmode"] not in ("disable", "allow", "prefer"):
+        # cert paths: RELIQUARY_ENRICHMENT_* env wins (the probe role uses its OWN client
+        # cert, distinct from the app role's), else fall back to the app config defaults.
+        env_certs = {
+            "sslrootcert": env("RELIQUARY_ENRICHMENT_PGSSLROOTCERT"),
+            "sslcert": env("RELIQUARY_ENRICHMENT_PGSSLCERT"),
+            "sslkey": env("RELIQUARY_ENRICHMENT_PGSSLKEY"),
+        }
         for k in ("sslrootcert", "sslcert", "sslkey"):
-            v = _PROD.get(k)
+            v = env_certs[k] or _PROD.get(k)
             if v:
                 kwargs[k] = v
     return kwargs
