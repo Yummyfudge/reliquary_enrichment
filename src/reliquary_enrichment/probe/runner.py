@@ -108,17 +108,22 @@ class ProbeRunner:
         return (f"{time.strftime('%H:%M:%S')} [{i}/{total}] {cid[:8]} | {detail} | "
                 f"elapsed {elapsed/60:.0f}m eta ~{eta/60:.0f}m")
 
-    def _status_line(self, i: int, total: int, now: float, start: float, win: dict) -> str:
-        """The §3 ~15-min heartbeat: % done / rolling chunk accept-rate / current tok/s."""
+    def _status_line(self, i: int, total: int, now: float, start: float,
+                     proc: int, acc: int, win: dict) -> str:
+        """The §3 ~15-min heartbeat (handoff format): progress / chunk accept-rate / tok/s.
+
+        accept-rate is CUMULATIVE + chunk-level (chunks with >=1 grounded record / chunks
+        processed) — the live coverage/recall signal. tok/s is ROLLING over the last window.
+        e.g. ``[HB +42m] 47/131 (36%) | accept 31/47 chunks (66%) | 18.4 tok/s | ETA ~80m``
+        """
         pct = 100.0 * i / total if total else 0.0
+        elapsed_m = (now - start) / 60.0
         win_secs = max(1e-9, now - win["t0"])
         toks = win["tok"] / win_secs
-        accept = (win["grounded"] / win["located"]) if win["located"] else 0.0
-        elapsed = (now - start) / 60.0
-        eta = (now - start) / i * (total - i) / 60.0 if i else 0.0
-        return (f"{time.strftime('%H:%M:%S')} STATUS {pct:.0f}% ({i}/{total}) | "
-                f"accept {accept:.0%} ({win['grounded']}/{win['located']} located, rolling) | "
-                f"{toks:.0f} tok/s | elapsed {elapsed:.0f}m eta ~{eta:.0f}m")
+        accept = (acc / proc) if proc else 0.0
+        eta_m = (now - start) / i * (total - i) / 60.0 if i else 0.0
+        return (f"[HB +{elapsed_m:.0f}m] {i}/{total} ({pct:.0f}%) | "
+                f"accept {acc}/{proc} chunks ({accept:.0%}) | {toks:.1f} tok/s | ETA ~{eta_m:.0f}m")
 
     def run(self, chunk_ids: list[str]) -> RunLog:
         log = RunLog(
@@ -127,9 +132,10 @@ class ProbeRunner:
         )
         total = len(chunk_ids)
         self._emit(f"START {total} chunks | model={self._candidate_model} schema={self._schema}")
-        # Rolling window for the §3 status heartbeat (reset each interval).
+        # §3 status heartbeat: cumulative chunk accept-rate + ROLLING tok/s (window resets).
         status_last = log.started_at
-        win = {"t0": log.started_at, "tok": 0, "located": 0, "grounded": 0}
+        proc = acc = 0                         # cumulative: chunks processed / chunks with >=1 grounded
+        win = {"t0": log.started_at, "tok": 0}  # rolling window for tok/s only
         for i, cid in enumerate(chunk_ids, 1):
             got = self._read.get_chunk(cid, workstream_id=self._ws)
             if not got.get("ok"):
@@ -157,15 +163,16 @@ class ProbeRunner:
                 i, total, cid, log.started_at,
                 f"{len(proposals)} props | {g} grounded {len(chunk)-g-miss} bounced {miss} miss "
                 f"| {self._clock()-t0:.0f}s | total {log.records_written} recs"))
-            # accumulate the rolling window + emit a STATUS line every ~15 min
+            # accumulate coverage (cumulative, chunk-level) + tok/s window; emit ~every 15 min
+            proc += 1
+            if g > 0:
+                acc += 1
             win["tok"] += getattr(self._extractor, "last_completion_tokens", None) or 0
-            win["located"] += located
-            win["grounded"] += g
             now = self._clock()
             if now - status_last >= STATUS_INTERVAL_S:
-                self._emit(self._status_line(i, total, now, log.started_at, win))
+                self._emit(self._status_line(i, total, now, log.started_at, proc, acc, win))
                 status_last = now
-                win = {"t0": now, "tok": 0, "located": 0, "grounded": 0}
+                win = {"t0": now, "tok": 0}
         log.finished_at = self._clock()
         self._emit(f"DONE {log.chunks_seen} chunks seen, {log.records_written} records, "
                    f"{log.extract_errors} extract-fails, {log.wall_seconds/60:.0f}m")

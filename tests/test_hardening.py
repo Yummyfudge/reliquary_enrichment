@@ -127,6 +127,6 @@ def test_runner_emits_15min_status_heartbeat(monkeypatch):
                     label="t", candidate_model="m", schema="probe_t",
                     clock=clk, progress=lines.append)
     r.run(["aaaaaaaa-0000-0000-0000-000000000000", "bbbbbbbb-0000-0000-0000-000000000000"])
-    status = [l for l in lines if "STATUS" in l]
-    assert status, "expected a STATUS heartbeat line"
-    assert "tok/s" in status[0] and "accept" in status[0] and "%" in status[0]
+    hb = [l for l in lines if l.startswith("[HB")]
+    assert hb, "expected an [HB ...] heartbeat line"
+    assert "tok/s" in hb[0] and "accept" in hb[0] and "chunks" in hb[0] and "%" in hb[0]

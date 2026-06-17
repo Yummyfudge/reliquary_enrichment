@@ -23,6 +23,19 @@ source "$HOME/miniforge3/etc/profile.d/conda.sh"
 conda activate context-reliquary
 
 export PROBE_CANDIDATE_MODEL="$API_ALIAS"
+
+# Thinking-off for the Qwen3 family (handoff §2): they burn the whole budget inside <think>
+# on a trivial input and return empty otherwise. Verified mechanism: per-request
+# chat_template_kwargs.enable_thinking=false. gemma keeps thinking ON (budget is enough);
+# llama models are non-thinking. So we compare extraction, not deliberation length.
+case "$IDENTITY" in
+  qwen3.5*|qwen3-14b*|qwen3-omni*)
+    export PROBE_CANDIDATE_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'
+    echo "[run.sh] thinking-OFF for $IDENTITY" ;;
+  *)
+    unset PROBE_CANDIDATE_EXTRA_BODY 2>/dev/null || true ;;
+esac
+
 echo "[run.sh] candidate=$IDENTITY api_alias=$API_ALIAS label=$LABEL"
 python -m reliquary_enrichment.probe.cli "$IDENTITY" "$LABEL" \
   --api-model "$API_ALIAS" \
