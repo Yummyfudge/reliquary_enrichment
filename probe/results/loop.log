@@ -1,20 +1,46 @@
-[loop] ===== candidate: qwen2.5-72b =====
-[loop] swapping big-thinker -> PROFILE=qwen2.5-72b on llm-lxc
-sed: couldn't open temporary file /home/joe/lanes/lanes/big-thinker/sedDU7aRa: Permission denied
+[loop] ===== candidate: gemma-4-31b =====
+[loop] swapping big-thinker -> PROFILE=gemma-4-31b on llm-lxc
 lane 'big-thinker' down
-6ce83098f96a046f27b34a53fa5686457b863db496b0180d4ed7c52476c78c3e
-lane 'big-thinker' [qwen2.5-72b / llamacpp] -> :8000  gpus=0,1,2  mem=0.90
+8d324ba4d7e97c880afacead16ffd8fc55a65d8f415a6f5bcdb0c80c93a9625f
+lane 'big-thinker' [gemma-4-31b / llamacpp] -> :8000  gpus=0,1,2  mem=0.90
 watch it come up:  lane logs big-thinker
 [loop] waiting for big-thinker /health (timeout 600s)
-[loop] big-thinker healthy after 10s
-[run.sh] candidate=qwen2.5-72b api_alias=big-thinker label=qwen2_5_72b
-[loop] === restoring default PROFILE=qwen2.5-72b ===
-[loop] swapping big-thinker -> PROFILE=qwen2.5-72b on llm-lxc
-sed: couldn't open temporary file /home/joe/lanes/lanes/big-thinker/sedMSubvn: Permission denied
-lane 'big-thinker' down
-05f5a6d084121d40671fcff047c8925684034c573d78524708073088351658b8
-lane 'big-thinker' [qwen2.5-72b / llamacpp] -> :8000  gpus=0,1,2  mem=0.90
-watch it come up:  lane logs big-thinker
-[loop] waiting for big-thinker /health (timeout 600s)
-[loop] big-thinker healthy after 10s
-[loop] default qwen2.5-72b restored and healthy
+[loop] big-thinker healthy after 40s
+[run.sh] candidate=gemma-4-31b api_alias=big-thinker label=gemma_4_31b
+START 131 chunks | model=gemma-4-31b schema=probe_gemma_4_31b
+21:26:17 [1/131] 00b91853 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 2m eta ~260m
+21:28:18 [2/131] 01c962d1 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 4m eta ~258m
+21:28:43 [3/131] 0218d73a | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 0 recs | elapsed 4m eta ~189m
+21:30:43 [4/131] 02866c89 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 6m eta ~204m
+21:32:43 [5/131] 033f651c | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 8m eta ~212m
+21:34:43 [6/131] 03e87fde | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 10m eta ~217m
+21:36:44 [7/131] 04cfa1b6 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 12m eta ~220m
+21:38:44 [8/131] 0526db35 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 14m eta ~222m
+21:40:44 [9/131] 05eeb863 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 16m eta ~223m
+21:42:44 [10/131] 06140f01 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 18m eta ~223m
+21:44:44 [11/131] 06636e2b | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 20m eta ~223m
+21:46:44 [12/131] 068761f4 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 22m eta ~223m
+21:48:44 [13/131] 07816deb | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 24m eta ~222m
+21:49:20 [14/131] 087eea79 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 1 recs | elapsed 25m eta ~209m
+21:51:20 [15/131] 0a12cf2d | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 27m eta ~209m
+21:53:20 [16/131] 0cf406a0 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 29m eta ~209m
+21:55:20 [17/131] 0d23571f | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 31m eta ~208m
+21:57:20 [18/131] 116b49f5 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 33m eta ~207m
+21:57:56 [19/131] 1300ce41 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 2 recs | elapsed 34m eta ~198m
+21:59:56 [20/131] 1367237b | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 36m eta ~198m
+22:01:56 [21/131] 15ed8a8b | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 38m eta ~197m
+22:03:57 [22/131] 16e4041c | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 40m eta ~196m
+22:05:57 [23/131] 18836f14 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 42m eta ~196m
+22:07:57 [24/131] 1e02a6d9 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 44m eta ~195m
+22:09:57 [25/131] 1e440015 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 46m eta ~194m
+22:11:57 [26/131] 20579547 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 48m eta ~192m
+22:13:57 [27/131] 219cf6f0 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 50m eta ~191m
+22:14:36 [28/131] 22fa65f0 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 3 recs | elapsed 50m eta ~185m
+22:16:36 [29/131] 252e694c | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 52m eta ~184m
+22:18:36 [30/131] 2a544bbc | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 54m eta ~183m
+22:19:05 [31/131] 2c14400d | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 3 recs | elapsed 55m eta ~177m
+22:21:05 [32/131] 2f9b6b00 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 57m eta ~176m
+22:23:05 [33/131] 2fb42c37 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 59m eta ~175m
+22:25:05 [34/131] 373a5386 | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 61m eta ~173m
+22:25:54 [35/131] 3910708a | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 4 recs | elapsed 62m eta ~169m
+22:27:55 [36/131] 394571fc | EXTRACT FAIL (ReadTimeout) — skipped | elapsed 64m eta ~168m

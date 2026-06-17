@@ -20,10 +20,27 @@ from reliquary_enrichment.grounding.judge import LITELLM_BASE_URL
 from reliquary_enrichment.llm_http import post_json
 
 CANDIDATE_MODEL: str = os.getenv("PROBE_CANDIDATE_MODEL", "big-thinker")
-# Bounds for the candidate call (root-cause fix for the 2h hang): cap generation + a hard
-# total deadline. A chunk's JSON array of proposals fits comfortably in ~2k tokens.
-CANDIDATE_MAX_TOKENS: int = int(os.getenv("PROBE_CANDIDATE_MAX_TOKENS", "2048"))
-CANDIDATE_DEADLINE_S: float = float(os.getenv("PROBE_CANDIDATE_DEADLINE_S", "180"))
+# Bounds for the candidate call. Audition-2 handoff §2: the small max_tokens + short deadline
+# are what failed gemma (thinking models burned the budget inside <think> and got cut off /
+# timed out, returning empty). Defaults are now GENEROUS — large max_tokens so thinking models
+# finish their reasoning AND emit the JSON, and a long total deadline so a slow model isn't
+# cut off. All env-overridable per candidate by run.sh / the operator.
+CANDIDATE_MAX_TOKENS: int = int(os.getenv("PROBE_CANDIDATE_MAX_TOKENS", "4096"))
+CANDIDATE_DEADLINE_S: float = float(os.getenv("PROBE_CANDIDATE_DEADLINE_S", "600"))
+
+# Extra request-body params merged into the chat call — JSON in PROBE_CANDIDATE_EXTRA_BODY.
+# This is where a candidate-specific knob like thinking-off goes, e.g. for qwen3.5:
+#   PROBE_CANDIDATE_EXTRA_BODY='{"chat_template_kwargs": {"enable_thinking": false}}'
+# (exact mechanism per the Architect handoff — confirm before the qwen3.5 run).
+def _extra_body() -> dict:
+    raw = os.getenv("PROBE_CANDIDATE_EXTRA_BODY", "").strip()
+    if not raw:
+        return {}
+    try:
+        val = json.loads(raw)
+        return val if isinstance(val, dict) else {}
+    except json.JSONDecodeError:
+        return {}
 
 _SYSTEM = (
     "You extract grounded facts from a single chunk of an insurance claim file. For each "
@@ -165,11 +182,14 @@ class CandidateExtractor:
         base_url: str = LITELLM_BASE_URL,
         max_tokens: int = CANDIDATE_MAX_TOKENS,
         deadline_s: float = CANDIDATE_DEADLINE_S,
+        extra_body: dict | None = None,
     ) -> None:
         self._model = model
         self._endpoint = f"{base_url.rstrip('/')}/v1/chat/completions"
         self._max_tokens = max_tokens
         self._deadline_s = deadline_s
+        self._extra_body = extra_body if extra_body is not None else _extra_body()
+        self.last_completion_tokens: int | None = None  # for the runner's tok/s heartbeat
 
     @property
     def model(self) -> str:
@@ -187,9 +207,12 @@ class CandidateExtractor:
             ],
             "temperature": 0,
             "max_tokens": self._max_tokens,
+            **self._extra_body,   # e.g. thinking-off for qwen3.5 (handoff §2)
         }
         body = post_json(
             self._endpoint, payload,
             read_timeout=min(self._deadline_s, 120.0), total_deadline=self._deadline_s,
         )
+        usage = body.get("usage") or {}
+        self.last_completion_tokens = usage.get("completion_tokens")
         return parse_proposals(body["choices"][0]["message"]["content"])

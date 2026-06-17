@@ -1,0 +1,17 @@
+[run.sh] candidate=qwen3-omni-30b api_alias=big-thinker label=qwen3_omni_30b
+START 131 chunks | model=qwen3-omni-30b schema=probe_qwen3_omni_30b
+22:31:19 [1/131] 00b91853 | 9 props | 2 grounded 3 bounced 4 miss | 6s | total 2 recs | elapsed 0m eta ~44m
+22:31:44 [2/131] 01c962d1 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 2 recs | elapsed 1m eta ~49m
+22:31:45 [3/131] 0218d73a | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 2 recs | elapsed 1m eta ~33m
+22:32:07 [4/131] 02866c89 | 9 props | 7 grounded 2 bounced 0 miss | 11s | total 9 recs | elapsed 1m eta ~36m
+22:32:35 [5/131] 033f651c | 9 props | 8 grounded 0 bounced 1 miss | 9s | total 17 recs | elapsed 2m eta ~41m
+22:33:03 [6/131] 03e87fde | 9 props | 8 grounded 1 bounced 0 miss | 11s | total 25 recs | elapsed 2m eta ~43m
+22:33:24 [7/131] 04cfa1b6 | 5 props | 2 grounded 3 bounced 0 miss | 9s | total 27 recs | elapsed 2m eta ~43m
+22:33:55 [8/131] 0526db35 | 11 props | 7 grounded 0 bounced 4 miss | 9s | total 34 recs | elapsed 3m eta ~45m
+22:34:03 [9/131] 05eeb863 | 3 props | 0 grounded 3 bounced 0 miss | 4s | total 34 recs | elapsed 3m eta ~42m
+22:34:14 [10/131] 06140f01 | 4 props | 3 grounded 1 bounced 0 miss | 6s | total 37 recs | elapsed 3m eta ~39m
+22:34:51 [11/131] 06636e2b | 11 props | 10 grounded 1 bounced 0 miss | 12s | total 47 recs | elapsed 4m eta ~42m
+22:35:08 [12/131] 068761f4 | 6 props | 3 grounded 1 bounced 2 miss | 6s | total 50 recs | elapsed 4m eta ~41m
+22:35:27 [13/131] 07816deb | 7 props | 4 grounded 3 bounced 0 miss | 8s | total 54 recs | elapsed 4m eta ~41m
+22:35:29 [14/131] 087eea79 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 55 recs | elapsed 5m eta ~38m
+probe/run.sh: line 30: 141194 Killed                  python -m reliquary_enrichment.probe.cli "$IDENTITY" "$LABEL" --api-model "$API_ALIAS" --slice probe/slice/chunk_ids.txt --out "probe/results/$LABEL"

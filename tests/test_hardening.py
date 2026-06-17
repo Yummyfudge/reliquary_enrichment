@@ -92,3 +92,41 @@ def test_runner_logs_and_skips_extract_timeout_then_finishes():
     assert log.extract_errors == 1 and log.records_written == 0   # skipped, run completed
     assert any("EXTRACT FAIL" in ln for ln in lines)
     assert any(ln.startswith("START") for ln in lines) and any(ln.startswith("DONE") for ln in lines)
+
+
+# --- §2 candidate extra_body (thinking-off) + §3 status heartbeat ---------------------
+class _ExtractorOK:
+    last_completion_tokens = 120
+    def extract(self, text):
+        from reliquary_enrichment.probe.extraction import ExtractionProposal
+        return [ExtractionProposal(quote="t", record_type="r")]
+
+
+def test_candidate_extra_body_and_token_capture(monkeypatch):
+    seen = {}
+    def fake_post_json(url, payload, **kw):
+        seen["payload"] = payload
+        return {"choices": [{"message": {"content": "[]"}}], "usage": {"completion_tokens": 42}}
+    monkeypatch.setattr(ext_mod, "post_json", fake_post_json)
+    ex = CandidateExtractor(model="m", extra_body={"chat_template_kwargs": {"enable_thinking": False}})
+    ex.extract("some text")
+    assert seen["payload"]["chat_template_kwargs"] == {"enable_thinking": False}  # thinking-off merged
+    assert seen["payload"]["max_tokens"] >= 1536                                  # handoff §2 floor
+    assert ex.last_completion_tokens == 42                                        # for tok/s
+
+
+def test_runner_emits_15min_status_heartbeat(monkeypatch):
+    import reliquary_enrichment.probe.runner as rmod
+    monkeypatch.setattr(rmod, "STATUS_INTERVAL_S", 0.0)   # emit a STATUS after each chunk
+    t = [0.0]
+    def clk():
+        t[0] += 1.0
+        return t[0]
+    lines = []
+    r = ProbeRunner(extractor=_ExtractorOK(), write_service=_Write(), read_service=_Read(),
+                    label="t", candidate_model="m", schema="probe_t",
+                    clock=clk, progress=lines.append)
+    r.run(["aaaaaaaa-0000-0000-0000-000000000000", "bbbbbbbb-0000-0000-0000-000000000000"])
+    status = [l for l in lines if "STATUS" in l]
+    assert status, "expected a STATUS heartbeat line"
+    assert "tok/s" in status[0] and "accept" in status[0] and "%" in status[0]

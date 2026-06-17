@@ -9,11 +9,15 @@ contained (logged, run continues) — only the loop level skips a whole candidat
 """
 
 import json
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from reliquary_enrichment.probe.extraction import locate_quote
+
+# §3 (audition-2 handoff): push a rolling status line on this cadence (default 15 min).
+STATUS_INTERVAL_S: float = float(os.getenv("PROBE_STATUS_INTERVAL_S", "900"))
 
 
 @dataclass(slots=True)
@@ -104,6 +108,18 @@ class ProbeRunner:
         return (f"{time.strftime('%H:%M:%S')} [{i}/{total}] {cid[:8]} | {detail} | "
                 f"elapsed {elapsed/60:.0f}m eta ~{eta/60:.0f}m")
 
+    def _status_line(self, i: int, total: int, now: float, start: float, win: dict) -> str:
+        """The §3 ~15-min heartbeat: % done / rolling chunk accept-rate / current tok/s."""
+        pct = 100.0 * i / total if total else 0.0
+        win_secs = max(1e-9, now - win["t0"])
+        toks = win["tok"] / win_secs
+        accept = (win["grounded"] / win["located"]) if win["located"] else 0.0
+        elapsed = (now - start) / 60.0
+        eta = (now - start) / i * (total - i) / 60.0 if i else 0.0
+        return (f"{time.strftime('%H:%M:%S')} STATUS {pct:.0f}% ({i}/{total}) | "
+                f"accept {accept:.0%} ({win['grounded']}/{win['located']} located, rolling) | "
+                f"{toks:.0f} tok/s | elapsed {elapsed:.0f}m eta ~{eta:.0f}m")
+
     def run(self, chunk_ids: list[str]) -> RunLog:
         log = RunLog(
             label=self._label, candidate_model=self._candidate_model,
@@ -111,6 +127,9 @@ class ProbeRunner:
         )
         total = len(chunk_ids)
         self._emit(f"START {total} chunks | model={self._candidate_model} schema={self._schema}")
+        # Rolling window for the §3 status heartbeat (reset each interval).
+        status_last = log.started_at
+        win = {"t0": log.started_at, "tok": 0, "located": 0, "grounded": 0}
         for i, cid in enumerate(chunk_ids, 1):
             got = self._read.get_chunk(cid, workstream_id=self._ws)
             if not got.get("ok"):
@@ -132,11 +151,21 @@ class ProbeRunner:
                 log.attempts.append(self._attempt(cid, handle, text, p))
             chunk = log.attempts[before:]
             g = sum(1 for a in chunk if a.ok)
-            miss = sum(1 for a in chunk if not a.located)
+            located = sum(1 for a in chunk if a.located)
+            miss = len(chunk) - located
             self._emit(self._line(
                 i, total, cid, log.started_at,
                 f"{len(proposals)} props | {g} grounded {len(chunk)-g-miss} bounced {miss} miss "
                 f"| {self._clock()-t0:.0f}s | total {log.records_written} recs"))
+            # accumulate the rolling window + emit a STATUS line every ~15 min
+            win["tok"] += getattr(self._extractor, "last_completion_tokens", None) or 0
+            win["located"] += located
+            win["grounded"] += g
+            now = self._clock()
+            if now - status_last >= STATUS_INTERVAL_S:
+                self._emit(self._status_line(i, total, now, log.started_at, win))
+                status_last = now
+                win = {"t0": now, "tok": 0, "located": 0, "grounded": 0}
         log.finished_at = self._clock()
         self._emit(f"DONE {log.chunks_seen} chunks seen, {log.records_written} records, "
                    f"{log.extract_errors} extract-fails, {log.wall_seconds/60:.0f}m")
