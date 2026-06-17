@@ -88,3 +88,16 @@ def test_score_from_data_rates_and_throughput():
     assert card.grounding_pass_rate == 0.5          # 1 grounded / 2 reached judge
     assert round(card.end_to_end_yield, 4) == round(1 / 3, 4)
     assert card.chunks_per_min == 2.0 and card.records_per_min == 1.0
+
+
+def test_score_surfaces_coverage_recall():
+    # F3: 5 chunks seen, but only 2 drew proposals -> 3 empty (the recall gap).
+    log = RunLog(label="t", candidate_model="m", schema="probe_t", chunk_ids=["c"] * 5,
+                 attempts=[
+                     Attempt("c1", "rt", "fact", located=True, ok=True),
+                     Attempt("c1", "rt", "fact", located=True, ok=True),
+                     Attempt("c2", "rt", "fact", located=True, ok=True),
+                 ],
+                 chunks_seen=5, chunks_missing=0, started_at=0.0, finished_at=60.0)
+    card = score_from_data(log, [_rec(GOLD_CHUNK_ID, rid=f"r{i}") for i in range(3)])
+    assert card.chunks_with_proposals == 2 and card.chunks_empty == 3

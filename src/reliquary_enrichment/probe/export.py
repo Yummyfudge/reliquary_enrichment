@@ -24,7 +24,8 @@ def _load(schema: str):
         cur.execute(
             f"SELECT record_id, source_chunk_id, record_type, tier, char_start, char_end, "
             f"evidence_span, actor, event_date, claim_relevance, fields, page, document, "
-            f"provenance_validation FROM {records_tbl} ORDER BY source_chunk_id, char_start"
+            f"provenance_validation, entity_refs FROM {records_tbl} "
+            f"ORDER BY source_chunk_id, char_start"
         )
         recs = cur.fetchall()
         chunk_ids = sorted({str(r["source_chunk_id"]) for r in recs})
@@ -45,6 +46,8 @@ def export_records(schema: str, out_dir: str | Path) -> int:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
+    # Full raw record per line — incl. provenance_validation (verdict + judge id + hashes) and
+    # entity_refs — so the run is independently re-analyzable after the schema is dropped.
     with (out / "records.jsonl").open("w") as fh:
         for r in recs:
             fh.write(json.dumps({
@@ -55,7 +58,9 @@ def export_records(schema: str, out_dir: str | Path) -> int:
                 "evidence_span": r["evidence_span"], "actor": r["actor"],
                 "event_date": r["event_date"], "claim_relevance": r["claim_relevance"],
                 "fields": r["fields"],
+                "provenance_validation": r["provenance_validation"],
                 "verdict": (r["provenance_validation"] or {}).get("verdict"),
+                "entity_refs": r["entity_refs"],
                 "page": r["page"], "document": r["document"],
             }, default=str, ensure_ascii=False) + "\n")
 

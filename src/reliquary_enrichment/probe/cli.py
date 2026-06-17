@@ -13,6 +13,8 @@ import json
 import sys
 from pathlib import Path
 
+import psycopg
+
 from reliquary_enrichment.entities import EntityResolver
 from reliquary_enrichment.grounding.core import GroundingCore
 from reliquary_enrichment.grounding.handles import HandleMap
@@ -42,22 +44,32 @@ def load_chunk_ids(path: str | Path) -> list[str]:
     return ids
 
 
-def prod_enrichment_counts() -> dict | None:
-    """Best-effort row counts of the PROD enrichment tables, or None if no read access.
+def prod_enrichment_counts() -> dict:
+    """Row counts of the PROD enrichment tables for the isolation proof (never None).
 
-    The scoped `probe` role has no grant on these — so on a real run this returns None and
-    isolation rests on that structural wall. With read access (e.g. the dry run as superuser)
-    it returns counts so the harness can assert prod is untouched before/after.
+    Returns ``{table: count, "_access": "ok"}`` when readable (needs SELECT on the prod
+    enrichment tables — see schema/grants.probe_read.sql). If the probe role is
+    permission-denied, returns ``{"_access": "permission_denied"}`` — itself proof the harness
+    cannot even READ prod enrichment, let alone write it (the wall, stronger). Either way the
+    run records its own isolation evidence rather than leaving nulls (F5).
     """
-    counts = {}
+    out: dict = {}
     try:
         with connect() as conn, conn.cursor() as cur:
             for t in _ENRICHMENT_TABLES:
                 cur.execute(f"SELECT count(*) AS n FROM {qualified(_PROD_SCHEMA, t)}")
-                counts[t] = cur.fetchone()["n"]
-        return counts
-    except Exception:
-        return None
+                out[t] = cur.fetchone()["n"]
+        out["_access"] = "ok"
+        return out
+    except psycopg.errors.InsufficientPrivilege:
+        return {"_access": "permission_denied"}
+    except Exception as exc:  # pragma: no cover - operational
+        return {"_access": f"error: {type(exc).__name__}"}
+
+
+def _isolation_unchanged(before: dict, after: dict) -> bool:
+    """True if prod enrichment is provably unchanged: equal counts, or read-denied both times."""
+    return before == after
 
 
 def execute_probe(
@@ -75,8 +87,12 @@ def execute_probe(
     Returns a dict: {scorecard, prod_untouched, prod_counts_before/after}. Persists
     attempts.jsonl, run_meta.json, scorecard.json under out_dir.
     """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
     before = prod_enrichment_counts()
     schema = create_probe_schema(label)
+    card = None
+    scored_and_exported = False
     try:
         handle_map = HandleMap()
         reader = PostgresFragmentReader()
@@ -91,10 +107,7 @@ def execute_probe(
             entity_resolver=EntityResolver(PostgresEntityStore(schema=schema)),
         )
         read_service = ReadTools(fragment_reader=reader, handle_map=handle_map)
-        out = Path(out_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        # Live heartbeat: tail -f probe/results/<label>/progress.log to watch progress + ETA;
-        # the last line shows which chunk is in flight, so a stall is obvious.
+        # Live heartbeat: tail -f probe/results/<label>/progress.log to watch progress + ETA.
         progress_file = (out / "progress.log").open("a", buffering=1)
 
         def _progress(line: str) -> None:
@@ -111,28 +124,34 @@ def execute_probe(
             run_log = runner.run(chunk_ids)
         finally:
             progress_file.close()
+        # ORDER: score -> export -> (only then) drop. The schema stays LIVE until BOTH its
+        # score and its raw export are on disk — never dropped unscored (F2).
         run_log.persist(out)
         card = score(schema, run_log)
         (out / "scorecard.json").write_text(json.dumps(card.as_dict(), indent=2))
-        # Dump records + their original Fragment text BEFORE the schema is dropped, so the
-        # run stays inspectable (records.jsonl + records.txt).
-        export_records(schema, out)
+        export_records(schema, out)         # raw records (evidence_span + PV + entity_refs)
+        scored_and_exported = True
     finally:
-        if drop_after:
+        after = prod_enrichment_counts()
+        untouched = _isolation_unchanged(before, after)
+        isolation = {
+            "prod_untouched": untouched,
+            "prod_counts_before": before,
+            "prod_counts_after": after,
+            "proof": ("count-verified" if before.get("_access") == "ok"
+                      else "structural: prod enrichment read-denied to the probe role"),
+            "scored_and_exported": scored_and_exported,
+        }
+        (out / "isolation.json").write_text(json.dumps(isolation, indent=2, default=str))
+        if drop_after and scored_and_exported:
             drop_probe_schema(label)
+        elif not scored_and_exported:
+            print(f"[probe] KEEPING schema {schema}: score/export did not complete — "
+                  "investigate before dropping (never drop unscored).", file=sys.stderr)
 
-    after = prod_enrichment_counts()
-    untouched = (before == after) if (before is not None and after is not None) else None
-    result = {
-        "scorecard": card.as_dict(),
-        "prod_untouched": untouched,
-        "prod_counts_before": before,
-        "prod_counts_after": after,
-    }
-    (Path(out_dir) / "isolation.json").write_text(json.dumps(result, indent=2, default=str))
     if untouched is False:
-        raise RuntimeError(f"ISOLATION BREACH: prod enrichment counts changed {before} -> {after}")
-    return result
+        raise RuntimeError(f"ISOLATION BREACH: prod enrichment changed {before} -> {after}")
+    return {"scorecard": card.as_dict() if card else None, **isolation}
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -58,6 +58,10 @@ class ScoreCard:
     records_per_min: float
     wall_seconds: float
     extract_errors: int = 0
+    # Coverage / recall (F3): how many Fragments the candidate actually engaged. Defaults
+    # keep older scorecards loadable.
+    chunks_with_proposals: int = 0      # distinct chunks that drew >=1 proposal
+    chunks_empty: int = 0               # chunks seen that drew ZERO proposals (the recall gap)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -116,6 +120,8 @@ def score_from_data(run_log, records: list[dict]) -> ScoreCard:
     n_proposals = len(attempts)
     n_located = sum(1 for a in attempts if a.located)
     n_locate_miss = n_proposals - n_located
+    chunks_with_proposals = len({a.chunk_id for a in attempts})
+    chunks_empty = max(0, run_log.chunks_seen - chunks_with_proposals)
     n_records = len(records)
     n_grounded = sum(1 for r in records if (r.get("provenance_validation") or {}).get("verdict") == "grounded")
     n_flagged = sum(1 for r in records if r.get("flagged"))
@@ -134,6 +140,7 @@ def score_from_data(run_log, records: list[dict]) -> ScoreCard:
         chunks_per_min=round(run_log.chunks_seen / minutes, 2) if minutes else 0.0,
         records_per_min=round(n_records / minutes, 2) if minutes else 0.0,
         wall_seconds=round(run_log.wall_seconds, 2), extract_errors=run_log.extract_errors,
+        chunks_with_proposals=chunks_with_proposals, chunks_empty=chunks_empty,
     )
 
 
@@ -162,7 +169,8 @@ def results_row(card: ScoreCard) -> str:
     sg = "✅ YES" if card.smoking_gun else "❌ no"
     return (
         f"| {card.label} | {card.candidate_model} | {card.grounding_pass_rate:.0%} "
-        f"({card.n_grounded}/{card.n_located}) | {card.cross_context_entities} | {sg} | "
+        f"({card.n_grounded}/{card.n_located}) | {card.chunks_with_proposals}/{card.chunks_seen} | "
+        f"{card.cross_context_entities} | {sg} | "
         f"{card.chunks_per_min:.1f} ch/min, {card.records_per_min:.1f} rec/min |"
     )
 
@@ -174,6 +182,8 @@ def results_detail(card: ScoreCard) -> str:
         f"({card.n_grounded} grounded / {card.n_located} reached judge; "
         f"{card.n_flagged} flagged; {card.n_locate_miss} pointing misses of {card.n_proposals} proposals)\n"
         f"- **End-to-end yield:** {card.end_to_end_yield:.1%} ({card.n_records} records / {card.n_proposals} proposals)\n"
+        f"- **Coverage / recall:** {card.chunks_with_proposals}/{card.chunks_seen} chunks drew proposals "
+        f"({card.chunks_empty} empty)\n"
         f"- **Cross-context entities (>=2 chunks):** {card.cross_context_entities}\n"
         f"- **Smoking-gun (B. Smith reversal on {GOLD_CHUNK_ID[:8]}…):** "
         f"{'✅ captured + grounded' if card.smoking_gun else '❌ missed'} "
@@ -185,6 +195,6 @@ def results_detail(card: ScoreCard) -> str:
 
 
 RESULTS_TABLE_HEADER = (
-    "| label | model | grounding% | cross-context | smoking-gun | throughput |\n"
-    "|---|---|---|---|---|---|"
+    "| label | model | grounding% | coverage | cross-context | smoking-gun | throughput |\n"
+    "|---|---|---|---|---|---|---|"
 )

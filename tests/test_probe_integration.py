@@ -8,6 +8,7 @@ WHOLE harness: create probe_<label> schema, drive write_enrichment into it, scor
 drop the schema. Marked integration; guarded to a local password-auth scratch DB.
 """
 
+import json
 import os
 
 import pytest
@@ -91,16 +92,43 @@ def test_probe_dry_run_scores_and_leaves_prod_untouched(seeded, tmp_path):
     # throughput recorded
     assert card["records_per_min"] >= 0
 
-    # ISOLATION: prod enrichment counts unchanged, and the probe schema was dropped.
+    # coverage / recall surfaced (F3)
+    assert card["chunks_with_proposals"] >= 1 and "chunks_empty" in card
+
+    # ISOLATION: prod enrichment counts captured + unchanged; isolation.json populated (F5).
     assert result["prod_untouched"] is True
     assert prod_enrichment_counts() == before
+    iso = json.loads((tmp_path / "isolation.json").read_text())
+    assert iso["prod_untouched"] is True and iso["scored_and_exported"] is True
+    assert iso["proof"] == "count-verified"          # scratch superuser can read counts
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name=%s",
                     (probe_schema_name("dryrun"),))
-        assert cur.fetchone() is None  # dropped after scoring
+        assert cur.fetchone() is None  # dropped — but only AFTER score + export
 
-    # results artifacts written
+    # RAW records exported (incl. evidence_span + provenance_validation + entity_refs) BEFORE drop
     assert (tmp_path / "attempts.jsonl").exists() and (tmp_path / "scorecard.json").exists()
+    rec_lines = (tmp_path / "records.jsonl").read_text().splitlines()
+    assert rec_lines, "records.jsonl must be non-empty"
+    rec0 = json.loads(rec_lines[0])
+    assert rec0["evidence_span"] and "provenance_validation" in rec0 and "entity_refs" in rec0
+    assert (tmp_path / "records.txt").exists()
+
+
+def test_never_drops_schema_when_scoring_fails(seeded, tmp_path, monkeypatch):
+    # If score/export can't complete, the schema must be KEPT for investigation (F2), not dropped.
+    import reliquary_enrichment.probe.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "score", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError):
+        execute_probe(label="keepme", candidate_model="qwen-fake", chunk_ids=[GOLD_CHUNK_ID],
+                      out_dir=str(tmp_path), extractor=FakeExtractor(),
+                      judge=ConstantJudge(Verdict.GROUNDED), drop_after=True)
+    from reliquary_enrichment.probe.schema import drop_probe_schema, probe_schema_name as psn
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name=%s", (psn("keepme"),))
+        kept = cur.fetchone() is not None
+    drop_probe_schema("keepme")          # cleanup
+    assert kept, "schema was dropped despite scoring failure — must keep unscored schemas"
 
 
 def test_probe_writes_only_to_probe_schema_not_prod(seeded, tmp_path):
