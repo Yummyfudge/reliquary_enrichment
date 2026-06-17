@@ -1,0 +1,145 @@
+[run.sh] candidate=qwen3-14b api_alias=big-thinker label=qwen3_14b
+START 131 chunks | model=qwen3-14b schema=probe_qwen3_14b
+16:47:08 [1/131] 00b91853 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 0 recs | elapsed 1m eta ~108m
+16:47:58 [2/131] 01c962d1 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 0 recs | elapsed 2m eta ~107m
+16:48:06 [3/131] 0218d73a | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 0 recs | elapsed 2m eta ~76m
+16:48:55 [4/131] 02866c89 | 6 props | 4 grounded 2 bounced 0 miss | 9s | total 4 recs | elapsed 3m eta ~83m
+16:49:44 [5/131] 033f651c | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 4 recs | elapsed 3m eta ~87m
+16:50:33 [6/131] 03e87fde | 7 props | 7 grounded 0 bounced 0 miss | 8s | total 11 recs | elapsed 4m eta ~89m
+16:51:23 [7/131] 04cfa1b6 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 11 recs | elapsed 5m eta ~90m
+16:52:13 [8/131] 0526db35 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 11 recs | elapsed 6m eta ~91m
+16:53:03 [9/131] 05eeb863 | 6 props | 3 grounded 3 bounced 0 miss | 7s | total 14 recs | elapsed 7m eta ~91m
+16:53:54 [10/131] 06140f01 | 10 props | 10 grounded 0 bounced 0 miss | 10s | total 24 recs | elapsed 8m eta ~92m
+16:54:44 [11/131] 06636e2b | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 24 recs | elapsed 8m eta ~92m
+16:55:24 [12/131] 068761f4 | 7 props | 3 grounded 2 bounced 2 miss | 6s | total 27 recs | elapsed 9m eta ~90m
+16:56:18 [13/131] 07816deb | 8 props | 5 grounded 3 bounced 0 miss | 11s | total 32 recs | elapsed 10m eta ~91m
+16:56:36 [14/131] 087eea79 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 33 recs | elapsed 10m eta ~86m
+16:57:25 [15/131] 0a12cf2d | 6 props | 4 grounded 1 bounced 1 miss | 7s | total 37 recs | elapsed 11m eta ~86m
+16:58:14 [16/131] 0cf406a0 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 37 recs | elapsed 12m eta ~86m
+16:58:53 [17/131] 0d23571f | 5 props | 5 grounded 0 bounced 0 miss | 6s | total 42 recs | elapsed 13m eta ~84m
+16:59:43 [18/131] 116b49f5 | 6 props | 3 grounded 2 bounced 1 miss | 6s | total 45 recs | elapsed 13m eta ~84m
+16:59:55 [19/131] 1300ce41 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 46 recs | elapsed 14m eta ~80m
+17:00:50 [20/131] 1367237b | 10 props | 8 grounded 2 bounced 0 miss | 11s | total 54 recs | elapsed 15m eta ~81m
+17:01:40 [21/131] 15ed8a8b | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 54 recs | elapsed 15m eta ~80m
+17:02:30 [22/131] 16e4041c | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 54 recs | elapsed 16m eta ~80m
+17:03:20 [23/131] 18836f14 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 54 recs | elapsed 17m eta ~80m
+17:04:10 [24/131] 1e02a6d9 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 54 recs | elapsed 18m eta ~80m
+17:04:44 [25/131] 1e440015 | 3 props | 1 grounded 1 bounced 1 miss | 2s | total 55 recs | elapsed 18m eta ~78m
+17:05:33 [26/131] 20579547 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 55 recs | elapsed 19m eta ~78m
+17:06:23 [27/131] 219cf6f0 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 55 recs | elapsed 20m eta ~77m
+17:06:29 [28/131] 22fa65f0 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 55 recs | elapsed 20m eta ~74m
+17:07:04 [29/131] 252e694c | 3 props | 2 grounded 1 bounced 0 miss | 4s | total 57 recs | elapsed 21m eta ~73m
+17:07:54 [30/131] 2a544bbc | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 57 recs | elapsed 22m eta ~73m
+17:08:00 [31/131] 2c14400d | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 57 recs | elapsed 22m eta ~70m
+17:08:27 [32/131] 2f9b6b00 | 3 props | 3 grounded 0 bounced 0 miss | 4s | total 60 recs | elapsed 22m eta ~69m
+17:08:42 [33/131] 2fb42c37 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 61 recs | elapsed 22m eta ~66m
+17:09:32 [34/131] 373a5386 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 61 recs | elapsed 23m eta ~66m
+17:10:21 [35/131] 3910708a | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 61 recs | elapsed 24m eta ~66m
+17:11:10 [36/131] 394571fc | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 61 recs | elapsed 25m eta ~66m
+17:11:38 [37/131] 41dabd58 | 4 props | 0 grounded 4 bounced 0 miss | 5s | total 61 recs | elapsed 25m eta ~64m
+17:12:17 [38/131] 45b396a2 | 6 props | 5 grounded 1 bounced 0 miss | 7s | total 66 recs | elapsed 26m eta ~64m
+17:13:07 [39/131] 45d62bc0 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 66 recs | elapsed 27m eta ~63m
+17:13:57 [40/131] 4650ffb5 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 66 recs | elapsed 28m eta ~63m
+17:14:48 [41/131] 473c3a74 | 6 props | 5 grounded 1 bounced 0 miss | 7s | total 71 recs | elapsed 28m eta ~63m
+17:15:38 [42/131] 47aaf000 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 71 recs | elapsed 29m eta ~62m
+17:16:34 [43/131] 482eddca | 7 props | 6 grounded 0 bounced 1 miss | 6s | total 77 recs | elapsed 30m eta ~62m
+17:17:34 [44/131] 51aecffc | 8 props | 1 grounded 7 bounced 0 miss | 10s | total 78 recs | elapsed 31m eta ~62m
+17:18:24 [45/131] 541aa6c3 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 78 recs | elapsed 32m eta ~61m
+17:19:14 [46/131] 589eec8f | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 78 recs | elapsed 33m eta ~61m
+17:19:26 [47/131] 5c6c965f | 1 props | 1 grounded 0 bounced 0 miss | 2s | total 79 recs | elapsed 33m eta ~59m
+17:20:16 [48/131] 5c8d6c0e | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 79 recs | elapsed 34m eta ~59m
+17:20:43 [49/131] 5de1031c | 3 props | 3 grounded 0 bounced 0 miss | 3s | total 82 recs | elapsed 34m eta ~58m
+17:21:33 [50/131] 5e256164 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 82 recs | elapsed 35m eta ~57m
+17:22:09 [51/131] 5e6343dc | 4 props | 3 grounded 0 bounced 1 miss | 3s | total 85 recs | elapsed 36m eta ~56m
+17:22:59 [52/131] 5f81ca8c | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 37m eta ~56m
+17:23:49 [53/131] 611634aa | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 38m eta ~55m
+17:24:39 [54/131] 62990fb6 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 38m eta ~55m
+17:25:29 [55/131] 65ebfbd5 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 39m eta ~54m
+17:26:19 [56/131] 6679e38e | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 40m eta ~54m
+17:27:09 [57/131] 67720eb8 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 41m eta ~53m
+17:27:15 [58/131] 68477726 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 41m eta ~52m
+17:28:04 [59/131] 689e83f8 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 85 recs | elapsed 42m eta ~51m
+17:28:49 [60/131] 6d6e3477 | 5 props | 4 grounded 1 bounced 0 miss | 5s | total 89 recs | elapsed 43m eta ~50m
+17:29:39 [61/131] 6dcdd138 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 89 recs | elapsed 43m eta ~50m
+17:29:55 [62/131] 72459cf9 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 90 recs | elapsed 44m eta ~49m
+17:30:09 [63/131] 75f1e685 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 90 recs | elapsed 44m eta ~47m
+17:30:35 [64/131] 7684c0ad | 2 props | 2 grounded 0 bounced 0 miss | 2s | total 92 recs | elapsed 44m eta ~46m
+17:31:25 [65/131] 79a73f80 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 92 recs | elapsed 45m eta ~46m
+17:32:15 [66/131] 80543476 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 92 recs | elapsed 46m eta ~45m
+17:33:02 [67/131] 820ae86f | 7 props | 5 grounded 1 bounced 1 miss | 6s | total 97 recs | elapsed 47m eta ~45m
+17:33:52 [68/131] 822aef17 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 97 recs | elapsed 48m eta ~44m
+17:34:37 [69/131] 8427ffd8 | 4 props | 0 grounded 4 bounced 0 miss | 8s | total 97 recs | elapsed 48m eta ~43m
+17:35:27 [70/131] 891f9759 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 97 recs | elapsed 49m eta ~43m
+17:35:48 [71/131] 89503c71 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 98 recs | elapsed 49m eta ~42m
+17:36:27 [72/131] 8953078b | 4 props | 2 grounded 2 bounced 0 miss | 6s | total 100 recs | elapsed 50m eta ~41m
+17:37:17 [73/131] 8c172863 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 51m eta ~41m
+17:37:24 [74/131] 982909dd | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 51m eta ~39m
+17:38:16 [75/131] 9b6b1cd3 | 6 props | 0 grounded 5 bounced 1 miss | 7s | total 100 recs | elapsed 52m eta ~39m
+17:38:44 [76/131] 9c4e43f8 | 4 props | 0 grounded 4 bounced 0 miss | 5s | total 100 recs | elapsed 52m eta ~38m
+17:39:33 [77/131] 9d94e222 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 53m eta ~37m
+17:39:40 [78/131] 9e91de0d | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 53m eta ~36m
+17:40:30 [79/131] a5e06e27 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 54m eta ~36m
+17:41:19 [80/131] a628e4b0 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 55m eta ~35m
+17:42:09 [81/131] a9a910d3 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 56m eta ~34m
+17:42:26 [82/131] a9f68831 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 56m eta ~34m
+17:43:21 [83/131] aa6a5049 | 9 props | 0 grounded 9 bounced 0 miss | 13s | total 100 recs | elapsed 57m eta ~33m
+17:44:10 [84/131] ac4d90f7 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 58m eta ~32m
+17:45:00 [85/131] ad7830c3 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 100 recs | elapsed 59m eta ~32m
+17:45:39 [86/131] ada0bac2 | 5 props | 5 grounded 0 bounced 0 miss | 6s | total 105 recs | elapsed 59m eta ~31m
+17:46:29 [87/131] adbe69ab | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 105 recs | elapsed 60m eta ~30m
+17:47:20 [88/131] b17d755e | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 105 recs | elapsed 61m eta ~30m
+17:48:10 [89/131] b311511e | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 105 recs | elapsed 62m eta ~29m
+17:48:59 [90/131] b35abc24 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 105 recs | elapsed 63m eta ~29m
+17:49:48 [91/131] b4ad4488 | 6 props | 5 grounded 1 bounced 0 miss | 7s | total 110 recs | elapsed 63m eta ~28m
+17:50:45 [92/131] b5e0de27 | 9 props | 9 grounded 0 bounced 0 miss | 10s | total 119 recs | elapsed 64m eta ~27m
+17:51:35 [93/131] b688184f | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 119 recs | elapsed 65m eta ~27m
+17:51:59 [94/131] b79ad129 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 120 recs | elapsed 66m eta ~26m
+17:52:05 [95/131] b8857ebb | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 120 recs | elapsed 66m eta ~25m
+17:52:54 [96/131] b8b19283 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 120 recs | elapsed 67m eta ~24m
+17:53:01 [97/131] b9c845b8 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 120 recs | elapsed 67m eta ~23m
+17:53:58 [98/131] bb335df5 | 6 props | 3 grounded 3 bounced 0 miss | 11s | total 123 recs | elapsed 68m eta ~23m
+17:54:43 [99/131] c20d105d | 3 props | 2 grounded 1 bounced 0 miss | 4s | total 125 recs | elapsed 68m eta ~22m
+17:54:50 [100/131] c2499a93 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 125 recs | elapsed 69m eta ~21m
+17:55:39 [101/131] c37cd731 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 125 recs | elapsed 69m eta ~21m
+17:56:23 [102/131] c4eb55ae | 7 props | 6 grounded 1 bounced 0 miss | 9s | total 131 recs | elapsed 70m eta ~20m
+17:57:17 [103/131] c9562cbd | 6 props | 6 grounded 0 bounced 0 miss | 8s | total 137 recs | elapsed 71m eta ~19m
+17:58:07 [104/131] d45db77e | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 137 recs | elapsed 72m eta ~19m
+17:59:00 [105/131] d48c9f0e | 6 props | 5 grounded 1 bounced 0 miss | 8s | total 142 recs | elapsed 73m eta ~18m
+17:59:26 [106/131] d4b6b43e | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 143 recs | elapsed 73m eta ~17m
+17:59:34 [107/131] d5a323cb | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 143 recs | elapsed 73m eta ~16m
+18:00:20 [108/131] d5fb4666 | 6 props | 0 grounded 5 bounced 1 miss | 6s | total 143 recs | elapsed 74m eta ~16m
+18:00:38 [109/131] d6cffb74 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 144 recs | elapsed 74m eta ~15m
+18:01:34 [110/131] d739cd20 | 8 props | 7 grounded 1 bounced 0 miss | 10s | total 151 recs | elapsed 75m eta ~14m
+18:01:41 [111/131] d8e5807d | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 151 recs | elapsed 75m eta ~14m
+18:01:53 [112/131] d9c072bc | 1 props | 1 grounded 0 bounced 0 miss | 2s | total 152 recs | elapsed 76m eta ~13m
+18:02:00 [113/131] db098e4a | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 152 recs | elapsed 76m eta ~12m
+18:02:49 [114/131] dc97531f | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 152 recs | elapsed 77m eta ~11m
+18:03:32 [115/131] dee01196 | 6 props | 5 grounded 0 bounced 1 miss | 5s | total 157 recs | elapsed 77m eta ~11m
+18:04:21 [116/131] e18785f6 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 157 recs | elapsed 78m eta ~10m
+18:04:28 [117/131] e30fb062 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 157 recs | elapsed 78m eta ~9m
+18:05:18 [118/131] e3505a2e | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 157 recs | elapsed 79m eta ~9m
+18:06:07 [119/131] e4797b54 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 157 recs | elapsed 80m eta ~8m
+18:06:55 [120/131] e5cea03f | 6 props | 4 grounded 2 bounced 0 miss | 6s | total 161 recs | elapsed 81m eta ~7m
+18:07:28 [121/131] e89b4426 | 4 props | 2 grounded 2 bounced 0 miss | 6s | total 163 recs | elapsed 81m eta ~7m
+18:08:18 [122/131] e98b9790 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 163 recs | elapsed 82m eta ~6m
+18:08:25 [123/131] ea75db75 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 163 recs | elapsed 82m eta ~5m
+18:08:39 [124/131] f04f1ce7 | 1 props | 1 grounded 0 bounced 0 miss | 1s | total 164 recs | elapsed 82m eta ~5m
+18:09:28 [125/131] f2484ba6 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 164 recs | elapsed 83m eta ~4m
+18:10:14 [126/131] f322041c | 7 props | 6 grounded 1 bounced 0 miss | 8s | total 170 recs | elapsed 84m eta ~3m
+18:10:56 [127/131] f4d2835a | 6 props | 3 grounded 3 bounced 0 miss | 6s | total 173 recs | elapsed 85m eta ~3m
+18:11:46 [128/131] f5225707 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 173 recs | elapsed 85m eta ~2m
+18:12:33 [129/131] f577aefa | 4 props | 3 grounded 0 bounced 1 miss | 3s | total 176 recs | elapsed 86m eta ~1m
+18:13:23 [130/131] faac0c09 | 0 props | 0 grounded 0 bounced 0 miss | 0s | total 176 recs | elapsed 87m eta ~1m
+18:14:09 [131/131] fec197a5 | 6 props | 4 grounded 1 bounced 1 miss | 6s | total 180 recs | elapsed 88m eta ~0m
+DONE 131 chunks seen, 180 records, 0 extract-fails, 88m
+{
+  "label": "qwen3_14b",
+  "model": "qwen3-14b",
+  "grounding_pass_rate": 0.6938,
+  "cross_context_entities": 26,
+  "smoking_gun": true,
+  "records_per_min": 2.05,
+  "prod_untouched": null
+}
+wrote probe/RESULTS.md
+[run.sh] done -> probe/results/qwen3_14b/ , probe/RESULTS.md

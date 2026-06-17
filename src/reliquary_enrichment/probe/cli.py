@@ -21,6 +21,7 @@ from reliquary_enrichment.postgres.connection import connect, qualified
 from reliquary_enrichment.postgres.entity_store import PostgresEntityStore
 from reliquary_enrichment.postgres.fragment_reader import PostgresFragmentReader
 from reliquary_enrichment.postgres.record_store import PostgresEnrichmentRecordStore
+from reliquary_enrichment.probe.export import export_records
 from reliquary_enrichment.probe.extraction import CandidateExtractor
 from reliquary_enrichment.probe.runner import ProbeRunner
 from reliquary_enrichment.probe.schema import create_probe_schema, drop_probe_schema
@@ -113,6 +114,9 @@ def execute_probe(
         run_log.persist(out)
         card = score(schema, run_log)
         (out / "scorecard.json").write_text(json.dumps(card.as_dict(), indent=2))
+        # Dump records + their original Fragment text BEFORE the schema is dropped, so the
+        # run stays inspectable (records.jsonl + records.txt).
+        export_records(schema, out)
     finally:
         if drop_after:
             drop_probe_schema(label)
