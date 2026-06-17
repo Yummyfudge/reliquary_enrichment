@@ -1,0 +1,33 @@
+{
+  "scorecard": {
+    "label": "qwen3_14b",
+    "candidate_model": "qwen3-14b",
+    "n_proposals": 271,
+    "n_located": 258,
+    "n_locate_miss": 13,
+    "n_records": 180,
+    "n_grounded": 179,
+    "n_flagged": 1,
+    "grounding_pass_rate": 0.6938,
+    "end_to_end_yield": 0.6642,
+    "cross_context_entities": 26,
+    "smoking_gun": true,
+    "smoking_gun_detail": {
+      "record_id": "576c2c6b-7c02-45bc-a3f4-068d3973eb04",
+      "signals": {
+        "actor_smith": true,
+        "reversal_direction": "back to",
+        "condition_swap": true
+      }
+    },
+    "chunks_seen": 131,
+    "chunks_missing": 0,
+    "chunks_per_min": 1.49,
+    "records_per_min": 2.05,
+    "wall_seconds": 5270.66,
+    "extract_errors": 0
+  },
+  "prod_untouched": null,
+  "prod_counts_before": null,
+  "prod_counts_after": null
+}

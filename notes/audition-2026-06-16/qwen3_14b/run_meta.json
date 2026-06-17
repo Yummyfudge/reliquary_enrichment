@@ -1,0 +1,13 @@
+{
+  "label": "qwen3_14b",
+  "candidate_model": "qwen3-14b",
+  "schema": "probe_qwen3_14b",
+  "chunks_seen": 131,
+  "chunks_missing": 0,
+  "extract_errors": 0,
+  "started_at": 20136.473255759,
+  "finished_at": 25407.135484869,
+  "n_chunks": 131,
+  "records_written": 180,
+  "wall_seconds": 5270.662229109999
+}
