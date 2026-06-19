@@ -5,9 +5,15 @@ glass-box state capture. No lane/DB — the model is a fake Completer."""
 
 import json
 
+from reliquary_enrichment.multipass.inputs import page_range_from_filename
 from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext
 from reliquary_enrichment.multipass.passes.pass1_prose import Pass1Prose, parse_prose_label
 from reliquary_enrichment.multipass.pipeline import Pipeline
+
+
+def test_page_range_from_filename():
+    assert page_range_from_filename("Aflac_claim_file_400-426.pdf") == ("Aflac_claim_file_400-426", 400, 426)
+    assert page_range_from_filename("Aflac_claim_file_575-580.pdf") == ("Aflac_claim_file_575-580", 575, 580)
 
 
 class FakeCompleter:
