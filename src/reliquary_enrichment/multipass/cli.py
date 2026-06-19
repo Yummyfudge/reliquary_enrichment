@@ -131,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("label", help="probe label -> probe_<label> schema + results dir")
     ap.add_argument("--api-model", default=None, help="LiteLLM alias to call (default big-thinker)")
     ap.add_argument("--pdf", action="append", default=[], help="page-range PDF filename (repeatable)")
+    ap.add_argument("--slice", default="probe/slice/chunk_ids.txt", help="frozen chunk_id slice")
     ap.add_argument("--out", default=None, help="output dir (default multipass/results/<label>)")
     ap.add_argument("--keep-schema", action="store_true")
     args = ap.parse_args(argv)
@@ -140,8 +141,8 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = args.out or f"multipass/results/{args.label}"
     result = execute_multipass(
         label=args.label, candidate_model=args.candidate_model, api_model=api_model,
-        pdf_filenames=tuple(args.pdf), out_dir=out_dir, extra_body=extra_body,
-        drop_after=not args.keep_schema,
+        pdf_filenames=tuple(args.pdf), slice_path=args.slice, out_dir=out_dir,
+        extra_body=extra_body, drop_after=not args.keep_schema,
     )
     g = result["gate"] or {}
     print(json.dumps({"candidate": args.candidate_model, "n_chunks": result["n_chunks"],
