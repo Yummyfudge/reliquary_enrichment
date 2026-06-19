@@ -32,6 +32,7 @@ from reliquary_enrichment.multipass.passes.pass4_9_cleanup import Pass4_9Cleanup
 from reliquary_enrichment.multipass.passes.pass4_keywords import Pass4Keywords
 from reliquary_enrichment.multipass.passes.pass5_meaning import Pass5Meaning
 from reliquary_enrichment.multipass.pipeline import Pipeline
+from reliquary_enrichment.multipass.review import write_review
 from reliquary_enrichment.postgres.entity_store import PostgresEntityStore
 from reliquary_enrichment.postgres.fragment_reader import PostgresFragmentReader
 from reliquary_enrichment.postgres.record_store import PostgresEnrichmentRecordStore
@@ -102,6 +103,7 @@ def execute_multipass(
         gate = read_gate(results)
         (out / "gate.json").write_text(json.dumps(gate.as_dict(), indent=2, default=str))
         export_records(schema, out)               # §5: raw records BEFORE drop
+        write_review(out)                          # basic enriched-data review.md (Joe's ask)
         scored_and_exported = True
     finally:
         progress_file.close()

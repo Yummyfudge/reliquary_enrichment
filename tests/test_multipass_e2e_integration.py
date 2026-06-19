@@ -91,6 +91,10 @@ def test_multipass_v0_end_to_end(seeded, tmp_path):
     state29 = json.loads((tmp_path / "2_9_consolidate.json").read_text())
     assert set(state29["outputs"]) == {"raw", "raw_types", "final", "mapping"}
 
+    # basic enriched-data review.md generated (Joe's ask) — original + enriched surfaced
+    review = (tmp_path / "review.md").read_text()
+    assert "Enriched-data review" in review and T1[:20] in review and (tmp_path / "inputs.json").exists()
+
     # §5: raw records exported BEFORE drop, with evidence_span; isolation populated; schema gone
     recs = (tmp_path / "records.jsonl").read_text().splitlines()
     assert recs and json.loads(recs[0])["evidence_span"]

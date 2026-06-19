@@ -51,6 +51,10 @@ class Pipeline:
         win = {"t0": started, "tok": 0}
         if self._out:
             self._out.mkdir(parents=True, exist_ok=True)
+            # capture the INPUTS too (original text per chunk) so the review is offline-readable
+            (self._out / "inputs.json").write_text(json.dumps(
+                {c.chunk_id: {"text": c.text, "source": c.source} for c in self._chunks},
+                indent=2))
 
         for p_idx, p in enumerate(self._passes):
             if p.per_chunk:
