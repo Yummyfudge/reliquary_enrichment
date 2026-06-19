@@ -10,6 +10,8 @@ from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext
 from reliquary_enrichment.multipass.passes.pass1_prose import Pass1Prose, parse_prose_label
 from reliquary_enrichment.multipass.passes.pass2_objecttypes import Pass2ObjectTypes, parse_type_list
 from reliquary_enrichment.multipass.passes.pass2_9_consolidate import Pass2_9Consolidate, parse_consolidation
+from reliquary_enrichment.multipass.confidence import ConfidencePlateau
+from reliquary_enrichment.multipass.passes.pass3_fillvalues import Pass3FillValues
 from reliquary_enrichment.multipass.pipeline import Pipeline
 
 
@@ -33,6 +35,31 @@ class FakeWholePass(Pass):
 
     def process_all(self, chunks, prior, ctx):
         return {"n_chunks": len(chunks), "prior_passes": sorted(prior)}
+
+
+class FakeProposer:
+    def __init__(self, script):
+        self.script = list(script)
+        self.feedbacks = []
+
+    def __call__(self, chunk, schema, feedback):
+        self.feedbacks.append(feedback)
+        return self.script.pop(0)
+
+
+class FakeGrounder:
+    def __init__(self, results):
+        self.results = list(results)
+        self.seen = []
+
+    def __call__(self, proposal, chunk):
+        self.seen.append(proposal)
+        return self.results.pop(0)
+
+
+def _pass3_ctx(proposer, grounder):
+    return PassContext(model=FakeCompleter(), model_name="f",
+                       extras={"proposer": proposer, "grounder": grounder})
 
 
 # --- Pass 1 parsing -------------------------------------------------------------------
@@ -87,6 +114,60 @@ def test_pass2_9_keeps_raw_final_mapping():
     assert set(state) == {"raw", "raw_types", "final", "mapping"}
     assert state["mapping"]["status_update"] == "status_change"
     assert all(t in state["mapping"] for t in state["raw_types"])   # every raw type mapped
+
+
+# --- confidence-plateau (Pass 3 retry bound) -----------------------------------------
+def test_plateau_first_attempt_never_stops():
+    assert ConfidencePlateau(0.05).record(0.3) is False
+
+
+def test_plateau_continue_when_beats_best_then_stop():
+    p = ConfidencePlateau(0.05)
+    assert p.record(0.60) is False     # first
+    assert p.record(0.70) is False     # beats best by >= 0.05 -> continue
+    assert p.record(0.72) is True      # 0.72 < 0.70+0.05 -> plateau
+
+
+def test_plateau_beats_best_so_far_not_previous():
+    p = ConfidencePlateau(0.05)
+    p.record(0.80)                     # best = 0.80
+    assert p.record(0.50) is True      # dip; 0.50 < 0.85 -> plateau (best-so-far survives the dip)
+
+
+def test_plateau_bound_emerges_from_epsilon():
+    p = ConfidencePlateau(0.10)
+    cont = 0
+    for c in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.0]:
+        if p.record(c):
+            break
+        cont += 1
+    assert cont <= 11                  # ~1/epsilon + first; bounded, no magic count
+
+
+# --- Pass 3 fill-values loop ----------------------------------------------------------
+def test_pass3_grounded_on_first_attempt():
+    pr = FakeProposer([({"confidence": 0.9, "record_type": "x"}, 10)])
+    gr = FakeGrounder([{"ok": True, "record_id": "r1"}])
+    out, toks = Pass3FillValues().process_chunk(ChunkRef("c", "t"), {}, _pass3_ctx(pr, gr))
+    assert out["grounded"] and out["record_id"] == "r1" and out["attempts"] == 1 and toks == 10
+
+
+def test_pass3_bounce_then_grounded_threads_judge_feedback():
+    pr = FakeProposer([({"confidence": 0.6}, 5), ({"confidence": 0.8}, 6)])
+    gr = FakeGrounder([{"ok": False, "detail": "date drifted", "reason_code": "ungrounded_fact"},
+                       {"ok": True, "record_id": "r2"}])
+    out, toks = Pass3FillValues().process_chunk(ChunkRef("c", "t"), {}, _pass3_ctx(pr, gr))
+    assert out["grounded"] and out["attempts"] == 2 and toks == 11
+    assert pr.feedbacks == [None, "date drifted"]      # judge feedback shaped the retry
+
+
+def test_pass3_plateau_gives_up_judge_verdict_stands():
+    pr = FakeProposer([({"confidence": 0.6}, 5), ({"confidence": 0.61}, 5)])  # 0.61 < 0.6+0.05
+    gr = FakeGrounder([{"ok": False, "detail": "no", "reason_code": "ungrounded_fact"}])
+    out, _ = Pass3FillValues(epsilon=0.05).process_chunk(ChunkRef("c", "t"), {}, _pass3_ctx(pr, gr))
+    assert out["grounded"] is False and out["attempts"] == 2
+    assert out["confidence_trajectory"] == [0.6, 0.61]
+    assert out["reason_code"] == "ungrounded_fact"      # the last judge verdict stands
 
 
 # --- pipeline heartbeat (cross-pass) + glass-box persistence -------------------------
