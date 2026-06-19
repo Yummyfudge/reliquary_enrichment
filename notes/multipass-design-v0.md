@@ -70,9 +70,16 @@ drop, order score→export→drop, populate `isolation.json`.
 The multipass is its own clean package; shared helpers are imported, not duplicated.
 
 ## Build order (TDD, pass by pass)
-v0 = runs end-to-end over the slice + the two PDFs, per-pass state captured, gate + needle both
-read. Order: framework → Pass 1 → 2 → 2.9 → 3 → 4 → 4.9 → 5 → gate → needle. Each lands with
-tests against fakes + the scratch DB; the real candidate run needs the lane (re-acquire baton).
+v0 = runs end-to-end over the slice (+ PDFs once named), per-pass state captured, **GATE read**.
+Order: framework → Pass 1 → 2 → 2.9 → 3 → 4 → 4.9 → 5 → gate. Each lands with tests against
+fakes + the scratch DB; the real candidate run needs the lane (re-acquire baton).
+
+**RESOLVED 2026-06-17 (Joe):**
+- **NEEDLE deferred for v0** — v0 reads the GATE (faithfulness) only; the needle (gold-rank over
+  fused retrieval) comes in a later iteration once the embed cutover / CRQ-002 is confirmed live.
+- **Test PDFs — pending Joe's filenames.** Build over the frozen slice now; PDF ingestion is a
+  pluggable input (a chunker that turns a PDF into ChunkRefs with source="pdf:<name>") added the
+  moment the two filenames land. The slice is the primary test input meanwhile.
 
 ## Flagged gaps — need feedback (building reasonable defaults meanwhile)
 1. **Which two claim PDFs?** Candidates under `context_reliquary/aflac_claim_intake/`:
