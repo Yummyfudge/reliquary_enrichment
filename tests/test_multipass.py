@@ -15,6 +15,7 @@ from reliquary_enrichment.multipass.passes.pass3_fillvalues import Pass3FillValu
 from reliquary_enrichment.multipass.passes.pass4_keywords import Pass4Keywords, parse_keyword_list
 from reliquary_enrichment.multipass.passes.pass4_9_cleanup import Pass4_9Cleanup, clean_keyword
 from reliquary_enrichment.multipass.passes.pass5_meaning import Pass5Meaning, parse_meaning
+from reliquary_enrichment.multipass.gate import read_gate
 from reliquary_enrichment.multipass.pipeline import Pipeline
 
 
@@ -212,6 +213,18 @@ def test_pass5_process_chunk():
                       model_name="f")
     out, toks = Pass5Meaning().process_chunk(ChunkRef("c", "t"), {}, ctx)
     assert out == {"claim_meaning": "m", "questions_answered": ["q"]} and toks == 9
+
+
+# --- GATE (per-chunk faithfulness) ----------------------------------------------------
+def test_read_gate_faithfulness_from_pass3():
+    results = {"3_fillvalues": PassResult("3_fillvalues", {
+        "c1": {"grounded": True, "reason_code": None, "attempts": 1},
+        "c2": {"grounded": False, "reason_code": "ungrounded_fact", "attempts": 3},
+        "c3": {"grounded": True, "attempts": 2}})}
+    g = read_gate(results)
+    assert g.chunks_total == 3 and g.chunks_grounded == 2 and g.chunks_ungrounded == 1
+    assert g.faithfulness_rate == round(2 / 3, 4)
+    assert g.per_chunk["c2"]["reason_code"] == "ungrounded_fact"
 
 
 # --- pipeline heartbeat (cross-pass) + glass-box persistence -------------------------
