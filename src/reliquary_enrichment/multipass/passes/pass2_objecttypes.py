@@ -7,10 +7,10 @@ actor, question). Just the types — values are Pass 3's job. Output feeds 2.9's
 into one emergent schema.
 """
 
-import json
 import re
 from typing import Any
 
+from reliquary_enrichment.multipass.parsing import safe_json_array
 from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext, PassResult
 
 _SYSTEM = (
@@ -30,15 +30,7 @@ def normalize_type(name: str) -> str:
 
 def parse_type_list(content: str) -> list[str]:
     """Defensively parse a JSON array of type-name strings; normalize + dedup (order-stable)."""
-    raw = content or ""
-    arr: Any
-    try:
-        arr = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        m = re.search(r"\[.*\]", raw, re.DOTALL)
-        arr = json.loads(m.group(0)) if m else []
-    if not isinstance(arr, list):
-        return []
+    arr = safe_json_array(content or "")
     out: list[str] = []
     seen: set[str] = set()
     for item in arr:

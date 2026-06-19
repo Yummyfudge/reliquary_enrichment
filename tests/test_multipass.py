@@ -16,7 +16,45 @@ from reliquary_enrichment.multipass.passes.pass4_keywords import Pass4Keywords, 
 from reliquary_enrichment.multipass.passes.pass4_9_cleanup import Pass4_9Cleanup, clean_keyword
 from reliquary_enrichment.multipass.passes.pass5_meaning import Pass5Meaning, parse_meaning
 from reliquary_enrichment.multipass.gate import read_gate
+from reliquary_enrichment.multipass.parsing import safe_json_array, safe_json_object
 from reliquary_enrichment.multipass.pipeline import Pipeline
+
+
+class _RaisingPass(Pass):
+    name = "boom"
+    per_chunk = True
+
+    def process_chunk(self, chunk, prior, ctx):
+        if chunk.chunk_id == "bad":
+            raise ValueError("kaboom")
+        return {"ok": True}, 1
+
+
+# --- robustness: defensive parsing never raises; pipeline contains per-chunk errors ---
+def test_safe_json_array_never_raises_on_bad_fallback():
+    # the exact crash class: a regex-extractable [...] that is itself invalid JSON
+    assert safe_json_array('["a": "b"]') == []
+    assert safe_json_array("noise [not, valid, json,] tail") == []
+    assert safe_json_array('["ok","good"]') == ["ok", "good"]
+    assert parse_type_list('["status": "x"]') == []          # pass-2 parser stays alive
+    assert parse_keyword_list("garbage [x: y]") == []        # pass-4 parser stays alive
+
+
+def test_safe_json_object_never_raises():
+    assert safe_json_object("{bad json") is None
+    assert safe_json_object('text {"k": 1} more') == {"k": 1}
+
+
+def test_pipeline_contains_per_chunk_errors(tmp_path):
+    chunks = [ChunkRef("good", "x"), ChunkRef("bad", "y"), ChunkRef("good2", "z")]
+    ctx = PassContext(model=FakeCompleter(), model_name="m")
+    lines: list[str] = []
+    res = Pipeline(passes=[_RaisingPass()], chunks=chunks, ctx=ctx, out_dir=str(tmp_path),
+                   emit=lines.append, status_interval_s=999).run()
+    out = res["boom"].outputs
+    assert out["good"] == {"ok": True} and out["good2"] == {"ok": True}   # neighbors unaffected
+    assert "error" in out["bad"]                                          # bad chunk contained
+    assert any("[skip]" in l for l in lines) and any("COMPLETE" in l for l in lines)
 
 
 def test_page_range_from_filename():

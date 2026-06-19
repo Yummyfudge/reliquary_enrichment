@@ -7,10 +7,10 @@ dates). Free phrases (kept lowercased; NOT snake_cased — keywords can be multi
 cleans/dedupes them across the file.
 """
 
-import json
 import re
 from typing import Any
 
+from reliquary_enrichment.multipass.parsing import safe_json_array
 from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext, PassResult
 
 _SYSTEM = (
@@ -30,14 +30,7 @@ def normalize_keyword(kw: str) -> str:
 
 def parse_keyword_list(content: str) -> list[str]:
     """Defensively parse a JSON array of keyword strings; normalize + dedup (order-stable)."""
-    raw = content or ""
-    try:
-        arr: Any = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        m = re.search(r"\[.*\]", raw, re.DOTALL)
-        arr = json.loads(m.group(0)) if m else []
-    if not isinstance(arr, list):
-        return []
+    arr = safe_json_array(content or "")
     out: list[str] = []
     seen: set[str] = set()
     for item in arr:

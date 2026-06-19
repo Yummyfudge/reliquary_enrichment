@@ -56,11 +56,17 @@ class Pipeline:
                 {c.chunk_id: {"text": c.text, "source": c.source} for c in self._chunks},
                 indent=2))
 
+        errors = 0
         for p_idx, p in enumerate(self._passes):
             if p.per_chunk:
                 outputs: dict = {}
                 for c_idx, chunk in enumerate(self._chunks, 1):
-                    out, toks = p.process_chunk(chunk, results, self._ctx)
+                    try:
+                        out, toks = p.process_chunk(chunk, results, self._ctx)
+                    except Exception as exc:   # CONTAIN: one bad chunk must not kill the run
+                        out, toks = {"error": f"{type(exc).__name__}: {exc}"}, 0
+                        errors += 1
+                        self._emit(f"[skip] {p.name} chunk {chunk.chunk_id[:8]} — {type(exc).__name__}")
                     outputs[chunk.chunk_id] = out
                     win["tok"] += toks or 0
                     now = self._clock()
@@ -70,15 +76,21 @@ class Pipeline:
                         win = {"t0": now, "tok": 0}
                 results[p.name] = PassResult(p.name, outputs)
             else:
-                results[p.name] = PassResult(
-                    p.name, p.process_all(self._chunks, results, self._ctx)
-                )
+                try:
+                    state = p.process_all(self._chunks, results, self._ctx)
+                except Exception as exc:       # CONTAIN: a consolidation error degrades, not crashes
+                    state = {"error": f"{type(exc).__name__}: {exc}"}
+                    errors += 1
+                    self._emit(f"[skip] consolidate {p.name} — {type(exc).__name__}")
+                results[p.name] = PassResult(p.name, state)
                 pct = 100.0 * (p_idx + 1) / n if n else 0.0
                 self._emit(
                     f"Test running | {self._ctx.model_name} | Pass {p_idx + 1}/{n} "
                     f"(consolidate {p.name}) | {pct:.0f}% total"
                 )
             self._persist(results[p.name])
+        self._emit(f"Test run COMPLETE | {self._ctx.model_name} | {total} chunks x {n} passes "
+                   f"| {errors} skipped")
         return results
 
     def _heartbeat(self, p_idx: int, n: int, c: int, total: int, now: float, win: dict) -> str:
