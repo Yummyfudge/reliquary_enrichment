@@ -42,6 +42,29 @@ def load_page_range_chunks(name: str, lo: int, hi: int) -> list[ChunkRef]:
     return [ChunkRef(str(r["claim_chunk_id"]), r["chunk_text"] or "", src) for r in rows]
 
 
+def assemble_inputs(
+    *, slice_path: str | Path = "probe/slice/chunk_ids.txt", pdf_filenames: tuple[str, ...] = ()
+) -> list[ChunkRef]:
+    """The v0 test set: the slice + each PDF page-range, **deduped by chunk_id** (Joe's verify).
+
+    Slice goes first, so on any slice∩range overlap the slice's ChunkRef wins (keeps
+    source='slice') and the chunk is processed/counted in /~total exactly once.
+    """
+    seen: set[str] = set()
+    out: list[ChunkRef] = []
+    for chunk in load_slice_chunks(slice_path):
+        if chunk.chunk_id not in seen:
+            seen.add(chunk.chunk_id)
+            out.append(chunk)
+    for filename in pdf_filenames:
+        name, lo, hi = page_range_from_filename(filename)
+        for chunk in load_page_range_chunks(name, lo, hi):
+            if chunk.chunk_id not in seen:
+                seen.add(chunk.chunk_id)
+                out.append(chunk)
+    return out
+
+
 def page_range_from_filename(filename: str) -> tuple[str, int, int]:
     """'Aflac_claim_file_400-426.pdf' -> ('Aflac_claim_file_400-426', 400, 426)."""
     stem = Path(filename).stem

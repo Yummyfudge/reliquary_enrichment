@@ -6,8 +6,10 @@ glass-box state capture. No lane/DB — the model is a fake Completer."""
 import json
 
 from reliquary_enrichment.multipass.inputs import page_range_from_filename
-from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext
+from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext, PassResult
 from reliquary_enrichment.multipass.passes.pass1_prose import Pass1Prose, parse_prose_label
+from reliquary_enrichment.multipass.passes.pass2_objecttypes import Pass2ObjectTypes, parse_type_list
+from reliquary_enrichment.multipass.passes.pass2_9_consolidate import Pass2_9Consolidate, parse_consolidation
 from reliquary_enrichment.multipass.pipeline import Pipeline
 
 
@@ -48,6 +50,43 @@ def test_pass1_classifies_each_chunk():
     p = Pass1Prose()
     out, toks = p.process_chunk(ChunkRef("c1", "Name: Smith\nDOB: ..."), {}, ctx)
     assert out == {"label": "non_prose"} and toks == 7
+
+
+# --- Pass 2 object-types + 2.9 consolidate --------------------------------------------
+def test_parse_type_list_normalizes_and_dedups():
+    assert parse_type_list('["Status Change","status_change","date"]') == ["status_change", "date"]
+    assert parse_type_list('noise ["actor",{"name":"Task Note"}] tail') == ["actor", "task_note"]
+    assert parse_type_list("not json") == []
+
+
+def test_pass2_process_chunk():
+    ctx = PassContext(model=FakeCompleter('["date","Actor"]', tokens=5), model_name="f")
+    out, toks = Pass2ObjectTypes().process_chunk(ChunkRef("c", "t"), {}, ctx)
+    assert out == {"object_types": ["date", "actor"]} and toks == 5
+
+
+def test_parse_consolidation_maps_every_raw_type():
+    canon, mapping = parse_consolidation(
+        '{"canonical":["status_change"],"mapping":{"status_update":"status_change"}}',
+        ["status_update", "date"])
+    assert mapping["status_update"] == "status_change"
+    assert mapping["date"] == "date"               # filled by identity fallback
+    canon2, map2 = parse_consolidation("junk", ["a", "b"])
+    assert map2 == {"a": "a", "b": "b"} and set(canon2) == {"a", "b"}
+
+
+def test_pass2_9_keeps_raw_final_mapping():
+    prior = {"2_objecttypes": PassResult("2_objecttypes", {
+        "c1": {"object_types": ["status_change", "date"]},
+        "c2": {"object_types": ["status_update"]}})}
+    ctx = PassContext(model=FakeCompleter(
+        '{"canonical":["status_change","date"],"mapping":'
+        '{"status_change":"status_change","status_update":"status_change","date":"date"}}'),
+        model_name="f")
+    state = Pass2_9Consolidate().process_all([ChunkRef("c1", "x"), ChunkRef("c2", "y")], prior, ctx)
+    assert set(state) == {"raw", "raw_types", "final", "mapping"}
+    assert state["mapping"]["status_update"] == "status_change"
+    assert all(t in state["mapping"] for t in state["raw_types"])   # every raw type mapped
 
 
 # --- pipeline heartbeat (cross-pass) + glass-box persistence -------------------------

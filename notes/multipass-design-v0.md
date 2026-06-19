@@ -77,9 +77,22 @@ fakes + the scratch DB; the real candidate run needs the lane (re-acquire baton)
 **RESOLVED 2026-06-17 (Joe):**
 - **NEEDLE deferred for v0** — v0 reads the GATE (faithfulness) only; the needle (gold-rank over
   fused retrieval) comes in a later iteration once the embed cutover / CRQ-002 is confirmed live.
-- **Test PDFs — pending Joe's filenames.** Build over the frozen slice now; PDF ingestion is a
-  pluggable input (a chunker that turns a PDF into ChunkRefs with source="pdf:<name>") added the
-  moment the two filenames land. The slice is the primary test input meanwhile.
+- **Test PDFs = corpus chunks for the page ranges** (`Aflac_claim_file_400-426`, `_575-580`):
+  comparable units (same chunker as the slice), the real production input, no OCR confound. Raw-PDF
+  ingestion is a SEPARATE later test, swapped behind the same ChunkRef interface. **DEDUP the
+  union:** slice (notes-section) + ranges (400-426, 575-580 = progress-notes) may overlap (found 4
+  slice chunks in-range) — union by chunk_id so nothing is processed or counted in /~330 twice.
+
+- **Pass 3 confidence-plateau (the retry bound) — exact rule:** each retry, read the model's
+  self-reported confidence; **STOP when a retry fails to beat the best-so-far confidence by ≥
+  epsilon.** Self-terminating (confidence∈[0,1], running max only climbs, each continue costs ≥
+  epsilon → ≤ ~1/epsilon retries; bound EMERGES from epsilon, no magic count; "beat best-so-far"
+  survives oscillation/saturation). **epsilon** is the one tunable (start ~0.05); **log the full
+  per-chunk confidence trajectory** (part of the glass-box capture) — that's what we tune from.
+  **Loop and judge stay SEPARATE:** the judge's feedback SHAPES each retry but the PLATEAU decides
+  the stop. A low plateau ≠ loop failure (means "more retries won't help"); the judge's gate at
+  persist then accepts/flags/bounces. Loop owns "keep trying?", judge owns "is it right?". Never
+  read a high plateau as "correct" — self-reported confidence is weak.
 
 ## Flagged gaps — need feedback (building reasonable defaults meanwhile)
 1. **Which two claim PDFs?** Candidates under `context_reliquary/aflac_claim_intake/`:

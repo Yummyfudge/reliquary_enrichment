@@ -52,3 +52,15 @@ def test_load_page_range_chunks_in_document_order(seeded):
     assert all(c.source == "pdf:Aflac_claim_file_400-426" for c in chunks)
     # ordered by (page_number, segment_index)
     assert ids.index(B) < ids.index(C)
+
+
+def test_assemble_inputs_dedups_slice_range_overlap(seeded, tmp_path):
+    from reliquary_enrichment.multipass.inputs import assemble_inputs
+    # B (page 410) is in BOTH the slice file AND the 400-426 range -> must appear once, slice wins.
+    sl = tmp_path / "slice2.txt"
+    sl.write_text(f"{A}\n{B}\n")
+    chunks = assemble_inputs(slice_path=sl, pdf_filenames=("Aflac_claim_file_400-426.pdf",))
+    ids = [c.chunk_id for c in chunks]
+    assert ids.count(B) == 1                                    # deduped
+    assert next(c for c in chunks if c.chunk_id == B).source == "slice"   # slice wins
+    assert C in ids                                            # C (range-only) still included
