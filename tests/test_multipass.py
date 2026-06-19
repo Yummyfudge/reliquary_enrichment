@@ -12,6 +12,9 @@ from reliquary_enrichment.multipass.passes.pass2_objecttypes import Pass2ObjectT
 from reliquary_enrichment.multipass.passes.pass2_9_consolidate import Pass2_9Consolidate, parse_consolidation
 from reliquary_enrichment.multipass.confidence import ConfidencePlateau
 from reliquary_enrichment.multipass.passes.pass3_fillvalues import Pass3FillValues
+from reliquary_enrichment.multipass.passes.pass4_keywords import Pass4Keywords, parse_keyword_list
+from reliquary_enrichment.multipass.passes.pass4_9_cleanup import Pass4_9Cleanup, clean_keyword
+from reliquary_enrichment.multipass.passes.pass5_meaning import Pass5Meaning, parse_meaning
 from reliquary_enrichment.multipass.pipeline import Pipeline
 
 
@@ -168,6 +171,47 @@ def test_pass3_plateau_gives_up_judge_verdict_stands():
     assert out["grounded"] is False and out["attempts"] == 2
     assert out["confidence_trajectory"] == [0.6, 0.61]
     assert out["reason_code"] == "ungrounded_fact"      # the last judge verdict stands
+
+
+# --- Pass 4 keywords + 4.9 cleanup ----------------------------------------------------
+def test_parse_keyword_list_lowercases_and_dedups():
+    assert parse_keyword_list('["Long COVID","long covid","B. Smith"]') == ["long covid", "b. smith"]
+    assert parse_keyword_list("not json") == []
+
+
+def test_pass4_process_chunk():
+    ctx = PassContext(model=FakeCompleter('["Reversal","mental health"]', tokens=4), model_name="f")
+    out, toks = Pass4Keywords().process_chunk(ChunkRef("c", "t"), {}, ctx)
+    assert out == {"keywords": ["reversal", "mental health"]} and toks == 4
+
+
+def test_pass4_9_cleanup_dedups_drops_trivial_keeps_glassbox():
+    assert clean_keyword("THE") == ""          # stopword dropped
+    assert clean_keyword("x") == ""            # too short dropped
+    assert clean_keyword(" Long  COVID ") == "long covid"
+    prior = {"4_keywords": PassResult("4_keywords", {
+        "c1": {"keywords": ["long covid", "the", "reversal"]},
+        "c2": {"keywords": ["Long COVID", "x"]}})}
+    state = Pass4_9Cleanup().process_all([ChunkRef("c1", "a"), ChunkRef("c2", "b")], prior,
+                                         PassContext(model=FakeCompleter(), model_name="f"))
+    assert set(state) == {"raw", "mapping", "final", "cleaned"}
+    assert "long covid" in state["final"] and "the" not in state["final"] and "x" not in state["final"]
+    assert state["cleaned"]["c2"] == ["long covid"]    # normalized + trivial dropped
+
+
+# --- Pass 5 meaning -------------------------------------------------------------------
+def test_parse_meaning_valid_and_fallback():
+    meaning, qs = parse_meaning('{"claim_meaning":"The reversal undid the approval.","questions_answered":["Why denied?"]}')
+    assert meaning == "The reversal undid the approval." and qs == ["Why denied?"]
+    m2, q2 = parse_meaning("just prose, no json")    # fallback keeps the prose
+    assert m2 == "just prose, no json" and q2 == []
+
+
+def test_pass5_process_chunk():
+    ctx = PassContext(model=FakeCompleter('{"claim_meaning":"m","questions_answered":["q"]}', tokens=9),
+                      model_name="f")
+    out, toks = Pass5Meaning().process_chunk(ChunkRef("c", "t"), {}, ctx)
+    assert out == {"claim_meaning": "m", "questions_answered": ["q"]} and toks == 9
 
 
 # --- pipeline heartbeat (cross-pass) + glass-box persistence -------------------------
