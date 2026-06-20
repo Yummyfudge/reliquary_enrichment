@@ -313,3 +313,21 @@ All unit tests use the existing fakes: `tests/fakes/fake_judge.py` (`ConstantJud
 ---
 
 **Key file map (verified @ `794d715`; bare names = `src/reliquary_enrichment/`):** rewrite `passes/pass5_meaning.py`, `passes/pass2_objecttypes.py`, `passes/pass3_fillvalues.py` (schema-source rewire, lines 35-38), `passes/pass2_9_consolidate.py`→`passes/pass2_9_normalize.py`, `multipass/fill_wiring.py`, `write_enrichment.py` (`_resolve_entities` 223-235; drop `claim_relevance` 42/90/104-105/130-131/200/224), `entities.py` (`_NORMALIZERS` 32 + canonicalizers), `multipass/gate.py` (29-50), `stores.py` (+read APIs, +`set_entity_flags`, +`get`/`entities_of_type`), `tests/fakes/fake_stores.py` (parity), `postgres/record_store.py` (`claim_relevance`→NULL, lines 24/26/29/41/64/66/84), `probe/export.py` (drop `claim_relevance` 26-27/59/98-99; +entities/links/meaning), `multipass/parsing.py` (+validators), `pass_base.py` (`PassContext.extras` typed slots, additive, line 101), `multipass/cli.py` (`all_passes` 48-50 literal; imports 31-32; extras 100-101), `multipass/review.py` (lines 34/38/56-58/72/75/86/88-90/99-100), `mcp.py` (drop `claim_relevance` 100/117), `models.py` (drop `claim_relevance` field 51 — LAST); delete `passes/pass4_keywords.py`, `passes/pass4_9_cleanup.py`; add `multipass/vocabulary.py`, `multipass/discriminative.py`, `passes/pass_link.py`, `meaning_writer.py`, `postgres/meaning_store.py`, `codex_walk.py`, `persistence.py`, `needle.py` (deferred), `schema/006_codex_entities_add_location.{up,down}.sql`, `schema/007_enrichment_meaning_local_fact.{up,down}.sql`, `schema/008_entity_refs_gin_index.{up,down}.sql`, `tests/fakes/fake_meaning_store.py`; extend `probe/schema.py` `_tables_ddl` (+location enum, +GIN on `entity_refs`, +meaning table, −`claim_relevance` column). Gold-note floor anchor: `89503c71-5ca2-424b-9386-6698a8337dc3` (slice line 71).
+
+---
+
+## 13. Addendum (2026-06-19) — no cross-context dependencies; the old probe goes in full
+
+**Standing invariant (Joe).** **No cross-context dependencies.** Each context (the multipass harness, the codex, etc.) is **self-contained**: if it needs something from another context, that thing is **MOVED in**, never imported across the boundary. A deprecated context is removed **in full**; anything worth keeping **relocates to the context that uses it.** (This extends the §12 "edit `reliquary_enrichment` only / never touch `context_reliquary`" rule from the *external* boundary down to *internal* module boundaries.)
+
+**FLAG-2 resolution — the old single-pass `probe/` harness is DEPRECATED IN FULL and DELETED.** It does not survive as a cross-context dependency of the multipass. Execute at **build step 5.5** with the coupling map:
+
+1. **MOVE into the multipass's own namespace** the pieces the multipass currently imports from `probe/` — **plus any other `multipass → probe` import the coupling map surfaces** (Engineer finalizes the exact layout):
+   - throwaway-schema create/drop (`probe/schema.py` → e.g. `multipass/isolation_schema.py`) — carrying the §6 DDL changes (+location, +GIN on `entity_refs`, +meaning table, **−`claim_relevance` column**) into the rehomed schema;
+   - record export (`probe/export.py` → e.g. `multipass/export.py`) — with the `claim_relevance` drop + the entities/links/meaning additions;
+   - isolation proof (`probe/cli.py` `_isolation_unchanged` / `prod_enrichment_counts` → e.g. `multipass/isolation.py`);
+   - the frozen slice (`probe/slice/chunk_ids.txt` → `multipass/slice/chunk_ids.txt`; update `inputs.py`'s default `slice_path`).
+2. **DELETE the rest of `probe/` entirely** — old scoring (`probe/scoring.py`), runner, extraction, the single-pass CLI (`probe/cli.py`'s `execute_probe`), `run.sh`, `RESULTS.md`.
+3. Result: `probe/` is gone, the multipass is self-contained, **zero cross-context imports**, no orphaned namespace. The `claim_relevance` removal then has no superseded-probe coupling left to break.
+
+**This SUPERSEDES the key-file-map block above:** the `probe/export.py` and `probe/schema.py` line-items become **moves into the multipass namespace** (carrying their listed changes), not in-place edits — and `probe/` is **deleted**, not retained.
