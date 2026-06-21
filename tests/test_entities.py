@@ -26,11 +26,12 @@ def test_date_canonicalizes_known_variants_to_iso():
         assert normalize_date(surface) == "2025-02-18", surface
 
 
-def test_date_ambiguous_numeric_is_not_guessed():
-    # both components <= 12 -> genuinely ambiguous (M/D vs D/M) -> NO silent guess.
-    out = normalize_date("03/02/2025")
-    assert out != "2025-03-02" and out != "2025-02-03"
-    assert out == "03/02/2025"  # conservative: surface kept, flagged for curation downstream
+def test_date_assumes_us_month_day_year():
+    # the corpus is US M/D/Y (verified on the slice); both-<=12 numerics resolve as M/D/Y. This does
+    # NOT over-merge: distinct dates still map to distinct ISO.
+    assert normalize_date("03/02/2025") == "2025-03-02"   # Mar 2 (US)
+    assert normalize_date("4/3/24") == "2024-04-03"       # Apr 3
+    assert normalize_date("3/4/24") == "2024-03-04"       # Mar 4 — distinct node from 4/3/24
 
 
 def test_date_unparseable_returns_surface_never_raises():
@@ -108,3 +109,29 @@ def test_full_month_names_still_canonicalize():
     # the strict month-token fix must not regress real month names/abbreviations.
     for surface in ("March 5 2025", "Mar 5 2025", "Sept 9 2025", "September 9 2025"):
         assert normalize_date(surface).startswith("2025-"), surface
+
+
+# --- REAL slice surfaces (the teeth — invented strings would miss these) ----
+
+def test_date_real_slice_variants_collapse_to_one_iso():
+    # REAL surfaces mined from the frozen slice: the SAME date appears in 3 forms and must collapse.
+    assert {normalize_date(s) for s in ("12/04/2023", "12/04/23", "12/4/23")} == {"2023-12-04"}
+    assert {normalize_date(s) for s in ("03/06/2024", "03/06/24", "3/6/24")} == {"2024-03-06"}
+    assert {normalize_date(s) for s in ("02/02/2024", "2/2/24")} == {"2024-02-02"}
+    assert normalize_date("1/30/24") != normalize_date("12/21/23")   # distinct dates stay distinct
+
+
+def test_date_three_digit_ocr_year_not_coerced():
+    # REAL OCR garbage from the slice ('12/05/022', '06/03/206'): a 3-digit year is not a date —
+    # return the surface, never a confident-but-wrong ISO.
+    assert normalize_date("12/05/022") == "12/05/022"
+    assert normalize_date("06/03/206") == "06/03/206"
+
+
+def test_code_real_slice_fullwidth_ocr_collapses_distinct_codes_do_not():
+    # REAL: 'F0６.４' (full-width OCR digits U+FF16/U+FF14) is the SAME code as F06.4; F07.4 is NOT.
+    assert normalize_code("F0６.４") == "F06.4"   # 'F0６.４'
+    assert normalize_code("F0６.4") == "F06.4"        # 'F0６.4'
+    assert normalize_code("f06.4") == "F06.4"
+    assert normalize_code("F07.4") == "F07.4"             # genuinely distinct code
+    assert normalize_code("F06.4") != normalize_code("F07.4")   # NOT over-merged

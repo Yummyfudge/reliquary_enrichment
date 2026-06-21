@@ -10,12 +10,13 @@ Canonicalization is per-type and REAL (brief §5.2 — the CRQ-001 dedupe lever)
 code -> upper/whitespace-stripped, location/document/provision -> whitespace-normalized, actor ->
 whitespace/separator-normalized. It stays alias-not-merge: surface variants of the SAME entity
 collapse to one canonical (variants recorded as aliases), while GENUINELY ambiguous identities
-("B. Smith" vs "Bruce Smith"; an all-numeric date that could be M/D or D/M) are NEVER silently
-merged — they keep distinct canonicals and are flagged for curation downstream (pass2_9_normalize).
+("B. Smith" vs "Bruce Smith") are NEVER silently merged — they keep distinct canonicals and are
+flagged for curation downstream (pass2_9_normalize). Dates assume the corpus's US M/D/Y convention.
 """
 
 import datetime as _dt
 import re
+import unicodedata
 
 from reliquary_enrichment.models import Entity, EntityRef
 from reliquary_enrichment.stores import EntityStore
@@ -35,11 +36,15 @@ for _i, (_abbr, _full) in enumerate((
     _MONTH_TOKENS[_full] = _i
 _MONTH_TOKENS["sept"] = 9
 
-# Separators accepted: '-', '/', '.'. Year-first (ISO order) vs year-last (M/D or D/M) are
-# distinguished by which end carries the 4-digit year. 2-digit years are NOT expanded (the century
-# is a guess) — they stay a distinct surface, never silently bucketed into a guessed year.
+# Separators accepted: '-', '/', '.'. Year-first (ISO order) vs year-last (M/D/Y) are distinguished
+# by which end carries the year. The corpus is US M/D/Y (verified on the slice — same date appears as
+# 12/04/2023 = 12/04/23 = 12/4/23); 2-digit years are expanded by the standard convention. This does
+# NOT over-merge: every distinct (month, day, year) still maps to a distinct ISO; only same-date
+# different-format surfaces collapse.
 _ISO_RE = re.compile(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$")
-_NUM_RE = re.compile(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$")
+# Year is EXACTLY 2 or 4 digits — a 3-digit OCR year (e.g. "12/05/022") is garbage, not a date,
+# and must return the surface unchanged rather than coerce to a confident-but-wrong ISO.
+_NUM_RE = re.compile(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$")
 # "Feb 18 2025" / "February 18, 2025" / "Feb 18, 2025"
 _MDY_NAME_RE = re.compile(r"^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$")
 # "18 Feb 2025" / "18 February, 2025"
@@ -60,14 +65,23 @@ def _iso(year, month, day) -> str | None:
         return None
 
 
-def normalize_date(surface: str) -> str:
-    """Canonicalize a date surface to ISO-8601 (YYYY-MM-DD) when UNAMBIGUOUS; otherwise return the
-    cleaned surface unchanged (never guess — an ambiguous date must not silently merge).
+def _expand_year(y: str) -> int:
+    """Expand a 2-digit year by the standard convention (00-68 -> 2000s, 69-99 -> 1900s); any other
+    width (4-digit) passes through. The corpus is 2023-2025 claims data, so 23/24/25 -> 2023/2024/2025."""
+    if len(y) == 2:
+        n = int(y)
+        return 2000 + n if n <= 68 else 1900 + n
+    return int(y)
 
-    Handles ISO, ``M/D/Y`` / ``D/M/Y`` (disambiguated only when one component is > 12), and
-    month-name forms (``Feb 18 2025`` / ``February 18, 2025`` / ``18 Feb 2025``).
+
+def normalize_date(surface: str) -> str:
+    """Canonicalize a date surface to ISO-8601 (YYYY-MM-DD). Handles ISO, US ``M/D/Y`` (the corpus
+    convention — 2-digit years expanded), and month-name forms (``Feb 18 2025`` / ``February 18,
+    2025`` / ``18 Feb 2025``). A non-date / unparseable surface returns unchanged (``Marbles 5 2025``
+    is not a date — strict month tokens). Distinct dates always map to distinct ISO, so this never
+    over-merges; only same-date different-format surfaces (``12/4/23`` / ``12/04/2023``) collapse.
     """
-    s = _WS.sub(" ", surface).strip()
+    s = _WS.sub(" ", unicodedata.normalize("NFKC", surface)).strip()
     m = _ISO_RE.match(s)
     if m:
         return _iso(*m.groups()) or s
@@ -81,18 +95,21 @@ def normalize_date(surface: str) -> str:
         return (_iso(m.group(3), mon, m.group(1)) or s) if mon else s
     m = _NUM_RE.match(s)
     if m:
-        a, b, y = int(m.group(1)), int(m.group(2)), m.group(3)
-        if a > 12 and b <= 12:        # first component is the day -> D/M/Y
-            return _iso(y, b, a) or s
-        if b > 12 and a <= 12:        # second component is the day -> M/D/Y
+        a, b = int(m.group(1)), int(m.group(2))
+        y = _expand_year(m.group(3))
+        if a <= 12:                    # US M/D/Y (the corpus convention; b>12 just confirms order)
             return _iso(y, a, b) or s
-        return s                       # both <=12 (ambiguous) or both >12 (invalid) -> no guess
+        if b <= 12:                    # a>12, so a must be the day -> D/M/Y
+            return _iso(y, b, a) or s
+        return s                       # both >12 -> not a valid calendar date
     return s
 
 
 def normalize_code(surface: str) -> str:
-    """Canonical code: strip ALL whitespace + uppercase (``f06.4`` / ``F 06.4`` -> ``F06.4``)."""
-    return _WS.sub("", surface).strip().upper()
+    """Canonical code: NFKC-fold (full-width OCR digits ``F0６.４`` -> ``F06.4``) + strip ALL
+    whitespace + uppercase (``f06.4`` / ``F 06.4`` -> ``F06.4``). Distinct codes (``F07.4`` vs
+    ``F06.4``) stay distinct — no over-merge."""
+    return _WS.sub("", unicodedata.normalize("NFKC", surface)).strip().upper()
 
 
 def normalize_location(surface: str) -> str:

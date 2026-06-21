@@ -134,6 +134,32 @@ bounded/conservative, left untouched; (c) the `len(ok)==n_proposed` all-grounded
 before a retry that might propose MORE entities — matches the brief's design (the model proposes the full
 batch; the loop retries bounces), a model-recall/cost tradeoff, not a loop bug.
 
+## Step 5 — EntityNormalizationPass + canonicalizer refinements — DONE (full suite 159 green)
+
+Driven by REAL slice surfaces (Joe's steer — invented strings hide over/under-merge):
+- **Canonicalizer refinements** (`entities.py`): `normalize_date` assumes the corpus's **US M/D/Y**,
+  expands 2-digit years (00-68→2000s), NFKC-folds, and rejects 3-digit OCR years; `normalize_code`
+  NFKC-folds full-width OCR digits (`F0６.４`→`F06.4`). Distinct dates/codes still map to distinct
+  canonicals (no over-merge); only same-entity format/OCR variants collapse.
+- **`pass2_9_normalize.py`** (`EntityNormalizationPass`, per_chunk=False): deterministic
+  resolve_or_create over what Pass 3 grounded → surface→entity_id glass box (raw/mapping/final);
+  residual LLM proposes same-type merges → **FLAGGED for curation, NEVER merged**.
+
+### Adversarial OVER-MERGE hunt (3 lenses, mined the WHOLE slice, executed repros)
+
+**No over-merge anywhere.** 278 real date surfaces → 132 ISO buckets, every multi-surface bucket =
+variants of ONE real date (the canonicalizer even *healed* a scout model-error date split). All
+distinct ICD codes stay distinct; full-width OCR folds correctly; distinct "Smith" people + the JoAnn
+family stay distinct. The residual path never merged under aggressive fakes (5000-element arrays,
+malformed/self/out-of-set pairs, non-JSON); crash-resistant (None records, empty fields, event skip).
+
+**Fixed (TDD):** (1) 3-digit OCR year (`12/05/022`) no longer coerces to a confident wrong ISO —
+`_NUM_RE` now requires exactly 2-or-4-digit years; (2) `flagged_merges` deduped (a spammy model reply
+can't bloat the glass box). **Documented, not changed:** mapping is `surface→entity_id` per spec
+(last-wins on the unreproducible same-string-two-types collision; `final` stays lossless); NFKC
+roman-numeral fold + `F06 4` internal-space collapse (neither in the slice); `Dr Smith`/`Dr. Smith`
+title-period **under**-merge (the safe direction — and the residual LLM flags it for curation).
+
 ## Step-7 note (gold-floor is ENTITY-LEVEL under record_type=entity_type)
 
 Joe confirmed: because each typed entity is its OWN record (record_type=entity_type), the gold-note
