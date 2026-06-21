@@ -260,6 +260,30 @@ without theme-boost against the gold-note acceptance), then decide build-or-not 
 after the first real grounded run**, not a permanent defer. (Joins the deferred list: 0.4 theme-fraction
 re-validation; this; the needle/CRQ-001.)
 
+## Step 7 — CrossChunkLinkPass + gold FLOOR — DONE (full suite 166 green)
+
+Wired the orphaned `LinkEvents` into the connective layer (link_events.py byte-unchanged):
+- **`pass_link.py`** — bounded candidate-gen (cross-chunk pairs sharing a NON-THEME anchor; themes
+  STOPLISTED; per-anchor fan-out F **and** a global K ceiling; dry-run glass-box before any model call),
+  TWO grounding classes (code-derived temporal precedes/follows over two ISO dates citing each record's
+  own grounded span; model-asserted semantic via the proposer), the `same_event` PRECISION guard
+  (same-anchor / DIFFERENT-dates never merges), and **`shared_themes` captured PER-LINK** (keyed
+  record_a/record_b/link_id) in the glass-box only — never on the Link row, never in any decision path
+  (guardrail-tested), so #9 (theme-as-qualifier) is offline-measurable.
+- **`floor.py`** — the entity-level gold FLOOR (B. Smith actor entity + reversal content on the chunk's
+  OWN text; date NOT required; whitespace-tolerant).
+- **`link_wiring.py`** — the real proposer; CODE injects the record ids (the model never supplies them).
+
+### Adversarial verification (2 lenses, executed against the REAL LinkEvents+GroundingCore) — HOLDS
+Invariant holds end-to-end: over-merge is airtight (a different-date same_event NEVER reaches
+materialization), `shared_themes` is provably write-only (written once, passed through once, read in zero
+decisions), the grounding spine is intact (code-injected ids; the judge proven a REAL gate — grounded a
+valid temporal, rejected a mis-sliced one storing 0; locate-miss dropped), and link_events.py is
+unmodified. **Fixed 3 LOW hardening items:** (1) global K ceiling on candidate count (§10 "pairs ≤ K",
+reported not silent); (2) case-insensitive same_event guard (a `SAME_EVENT` variant can't slip the guard
+yet write an inconsistent edge — defense-in-depth on the highest-severity over-merge); (3) the floor's
+reversal-marker check is now whitespace-tolerant (survives OCR line-wrap; the continuity anchor must).
+
 ## Step-7 note (gold-floor is ENTITY-LEVEL under record_type=entity_type)
 
 Joe confirmed: because each typed entity is its OWN record (record_type=entity_type), the gold-note
