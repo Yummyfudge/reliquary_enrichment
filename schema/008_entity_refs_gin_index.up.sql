@@ -12,7 +12,7 @@
 --   from 001 this migration is an IDEMPOTENT NO-OP backstop (CREATE INDEX IF NOT EXISTS) — it
 --   exists to satisfy the refactor migration manifest and to guarantee the index on any
 --   environment predating 001's GIN line. The PROBE schema lacks this index; it is added
---   directly in probe/schema.py _tables_ddl (not a prod migration, since the probe schema is
+--   directly in multipass/isolation_schema.py _tables_ddl (not a prod migration, since the probe schema is
 --   recreated each run). Applied by Joe. ADDITIVE (an index).
 --   Down in 008_entity_refs_gin_index.down.sql. Requires 001.
 

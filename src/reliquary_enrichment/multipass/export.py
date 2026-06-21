@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-"""Inspection export — stored record vs the ORIGINAL Fragment text.
+"""Inspection export — stored record vs the ORIGINAL Fragment text (the §5 raw-export-before-drop).
 
-The probe drops its throwaway schema after scoring, so without this the detailed records
-vanish. ``export_records`` runs BEFORE the drop and writes two artifacts under the run's
-results dir, so every run stays inspectable:
+Rehomed into `multipass/` from the retired `probe/` (codex refactor §13). The harness drops its
+throwaway schema after export, so without this the detailed records vanish. ``export_records`` runs
+BEFORE the drop and writes two artifacts under the run's results dir, so every run stays inspectable:
   * records.jsonl — one grounded record per line (machine-readable).
   * records.txt   — human-readable: per Fragment, the ORIGINAL chunk_text, then each record's
     code-sliced Evidence Span + fields + verdict, with a byte-exact check that
     ``evidence_span == chunk_text[char_start:char_end]`` (the grounding proof, visible).
+
+`claim_relevance` is gone (codex refactor §5.3 — whole-claim significance relocated; never written).
 """
 
 import json
@@ -23,7 +25,7 @@ def _load(schema: str):
         cur = conn.cursor()
         cur.execute(
             f"SELECT record_id, source_chunk_id, record_type, tier, char_start, char_end, "
-            f"evidence_span, actor, event_date, claim_relevance, fields, page, document, "
+            f"evidence_span, actor, event_date, fields, page, document, "
             f"provenance_validation, entity_refs FROM {records_tbl} "
             f"ORDER BY source_chunk_id, char_start"
         )
@@ -56,7 +58,7 @@ def export_records(schema: str, out_dir: str | Path) -> int:
                 "record_type": r["record_type"], "tier": r["tier"],
                 "char_start": r["char_start"], "char_end": r["char_end"],
                 "evidence_span": r["evidence_span"], "actor": r["actor"],
-                "event_date": r["event_date"], "claim_relevance": r["claim_relevance"],
+                "event_date": r["event_date"],
                 "fields": r["fields"],
                 "provenance_validation": r["provenance_validation"],
                 "verdict": (r["provenance_validation"] or {}).get("verdict"),
@@ -95,8 +97,6 @@ def export_records(schema: str, out_dir: str | Path) -> int:
                 lines.append(f"    event_date     : {r['event_date']}")
             if r["fields"]:
                 lines.append(f"    fields         : {json.dumps(r['fields'], ensure_ascii=False)}")
-            if r["claim_relevance"]:
-                lines.append(f"    claim_relevance: {r['claim_relevance']}")
             lines.append("")
     (out / "records.txt").write_text("\n".join(lines))
     return len(recs)

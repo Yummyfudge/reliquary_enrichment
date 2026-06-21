@@ -86,6 +86,14 @@ def test_resolve_entities_resolves_fields_carried_typed_entities():
     assert entities.find("location", "Atlanta GA") is not None
 
 
+def test_claim_relevance_is_removed_from_the_record_model():
+    # §5.3 throw: claim_relevance (whole-claim significance) is gone from EnrichmentRecord entirely.
+    from dataclasses import fields as dc_fields
+
+    from reliquary_enrichment.models import EnrichmentRecord
+    assert "claim_relevance" not in {f.name for f in dc_fields(EnrichmentRecord)}
+
+
 # 2. 🔴 The 89503 regression ----------------------------------------------------------
 def test_89503_mangled_handle_never_stores_corrupted_id():
     tool, handle, records, _, _ = build()
@@ -148,10 +156,7 @@ def test_interpretation_grounded_but_not_literal_is_stored():
     judge = ConstantJudge(Verdict.GROUNDED)
     tool, handle, records, _, _ = build(judge=judge)
     out = tool.write(
-        base_payload(
-            handle, tier="interpretation",
-            claim_relevance="the reversal undercuts the stated denial rationale",
-        ),
+        base_payload(handle, tier="interpretation"),   # actor/date/fields carry the asserted values
         workstream_id=WS,
     )
     assert out["ok"] is True
@@ -162,7 +167,7 @@ def test_interpretation_contradiction_bounced():
     judge = ConstantJudge(Verdict.UNGROUNDED)
     tool, handle, records, _, _ = build(judge=judge)
     out = tool.write(
-        base_payload(handle, tier="interpretation", claim_relevance="the claim was never reversed"),
+        base_payload(handle, tier="interpretation"),
         workstream_id=WS,
     )
     assert out["ok"] is False and out["reason_code"] == "unsupported_interpretation"

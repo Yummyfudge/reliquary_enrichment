@@ -43,7 +43,6 @@ class _Payload:
     fields: dict
     actor: str | None
     event_date: str | None
-    claim_relevance: str | None
     confidence: float | None
 
 
@@ -91,7 +90,7 @@ def _validate(payload: dict) -> _Payload:
         if not (0.0 <= float(confidence) <= 1.0):
             fail("confidence must be in [0,1]")
 
-    for k in ("actor", "event_date", "claim_relevance", "chunk_handle", "chunk_id"):
+    for k in ("actor", "event_date", "chunk_handle", "chunk_id"):
         v = payload.get(k)
         if v is not None and not isinstance(v, str):
             fail(f"{k} must be a string when present")
@@ -106,7 +105,6 @@ def _validate(payload: dict) -> _Payload:
         fields=fields,
         actor=payload.get("actor"),
         event_date=payload.get("event_date"),
-        claim_relevance=payload.get("claim_relevance"),
         confidence=float(confidence) if confidence is not None else None,
     )
 
@@ -122,7 +120,7 @@ def render_record_claim(p: _Payload) -> str:
     ("status_change"), not a value the span must literally contain. Including it made the
     judge bounce every fact whose record_type words weren't in the span (surfaced by the
     extraction probe against the real judge; the fake-judge unit tests couldn't catch it).
-    Only real asserted values (actor / date / fields / relevance) are grounded.
+    Only real asserted values (actor / date / fields) are grounded.
     """
     parts = []
     if p.actor:
@@ -131,8 +129,6 @@ def render_record_claim(p: _Payload) -> str:
         parts.append(f"event_date: {p.event_date}")
     if p.fields:
         parts.append(f"details: {json.dumps(p.fields, ensure_ascii=False, sort_keys=True)}")
-    if p.tier is Tier.INTERPRETATION and p.claim_relevance:
-        parts.append(f"relevance: {p.claim_relevance}")
     # Degenerate case (no asserted values): describe the record type without demanding it
     # appear literally in the span.
     return "; ".join(parts) if parts else f"the span records a {p.record_type} event"
@@ -204,7 +200,6 @@ class WriteEnrichment:
             fields=p.fields,
             actor=p.actor,
             event_date=p.event_date,
-            claim_relevance=p.claim_relevance,
             confidence=p.confidence,
             page=fragment.page,
             document=fragment.document,

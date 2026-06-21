@@ -13,8 +13,11 @@ from uuid import UUID
 from reliquary_enrichment.models import EnrichmentRecord, EntityRef
 from reliquary_enrichment.postgres.connection import DEFAULT_WRITE_SCHEMA, connect, qualified
 
+# claim_relevance is gone (codex refactor §5.3 — whole-claim significance relocated). The prod
+# column is retained (additive discipline) but never written; refactored-run rows are NULL there,
+# and the probe records table drops the column entirely (isolation_schema).
 _REC_COLS = (
-    "record_id, record_type, tier, fields, actor, event_date, claim_relevance, "
+    "record_id, record_type, tier, fields, actor, event_date, "
     "confidence, source_chunk_id, char_start, char_end, page, document, "
     "evidence_span, provenance_validation, entity_refs, flagged, supersedes"
 )
@@ -30,8 +33,7 @@ def _row_to_record(row: dict) -> EnrichmentRecord:
         source_chunk_id=str(row["source_chunk_id"]), char_start=row["char_start"],
         char_end=row["char_end"], evidence_span=row["evidence_span"],
         provenance_validation=row["provenance_validation"], fields=row["fields"] or {},
-        actor=row["actor"], event_date=row["event_date"],
-        claim_relevance=row["claim_relevance"], confidence=row["confidence"],
+        actor=row["actor"], event_date=row["event_date"], confidence=row["confidence"],
         page=row["page"], document=row["document"], entity_refs=refs,
         flagged=row["flagged"], supersedes=str(row["supersedes"]) if row["supersedes"] else None,
         record_id=str(row["record_id"]),
@@ -45,12 +47,12 @@ class PostgresEnrichmentRecordStore:
     def insert(self, record: EnrichmentRecord) -> str:
         sql = f"""
             INSERT INTO {self._table} (
-                record_id, record_type, tier, fields, actor, event_date, claim_relevance,
+                record_id, record_type, tier, fields, actor, event_date,
                 confidence, source_chunk_id, char_start, char_end, page, document,
                 evidence_span, provenance_validation, entity_refs, flagged, supersedes
             ) VALUES (
                 %(record_id)s, %(record_type)s, %(tier)s, %(fields)s, %(actor)s,
-                %(event_date)s, %(claim_relevance)s, %(confidence)s, %(source_chunk_id)s,
+                %(event_date)s, %(confidence)s, %(source_chunk_id)s,
                 %(char_start)s, %(char_end)s, %(page)s, %(document)s, %(evidence_span)s,
                 %(provenance_validation)s, %(entity_refs)s, %(flagged)s, %(supersedes)s
             )
@@ -62,7 +64,6 @@ class PostgresEnrichmentRecordStore:
             "fields": json.dumps(record.fields),
             "actor": record.actor,
             "event_date": record.event_date,
-            "claim_relevance": record.claim_relevance,
             "confidence": record.confidence,
             "source_chunk_id": record.source_chunk_id,
             "char_start": record.char_start,

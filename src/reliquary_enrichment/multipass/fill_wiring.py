@@ -23,7 +23,7 @@ import json
 from reliquary_enrichment.multipass.pass_base import ChunkRef, ModelClient
 from reliquary_enrichment.multipass.parsing import EntityProposal, validate_entity_proposal
 from reliquary_enrichment.multipass.vocabulary import ENTITY_TYPES
-from reliquary_enrichment.probe.extraction import locate_quote
+from reliquary_enrichment.multipass.locate import locate_quote
 
 _FILL_SYSTEM = (
     "Extract EVERY typed entity present in this claim-file chunk, over this FIXED type vocabulary: "

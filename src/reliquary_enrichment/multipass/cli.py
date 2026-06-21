@@ -22,7 +22,10 @@ from reliquary_enrichment.grounding.handles import HandleMap
 from reliquary_enrichment.grounding.judge import LiteLLMGroundingJudge
 from reliquary_enrichment.multipass.fill_wiring import make_grounder, make_proposer
 from reliquary_enrichment.multipass.gate import read_gate
-from reliquary_enrichment.multipass.inputs import assemble_inputs
+from reliquary_enrichment.multipass.export import export_records
+from reliquary_enrichment.multipass.inputs import _DEFAULT_SLICE, assemble_inputs
+from reliquary_enrichment.multipass.isolation import _isolation_unchanged, prod_enrichment_counts
+from reliquary_enrichment.multipass.isolation_schema import create_probe_schema, drop_probe_schema
 from reliquary_enrichment.multipass.pass_base import ModelClient, PassContext
 from reliquary_enrichment.multipass.passes.pass1_prose import Pass1Prose
 from reliquary_enrichment.multipass.passes.pass2_9_consolidate import Pass2_9Consolidate
@@ -36,9 +39,6 @@ from reliquary_enrichment.multipass.review import write_review
 from reliquary_enrichment.postgres.entity_store import PostgresEntityStore
 from reliquary_enrichment.postgres.fragment_reader import PostgresFragmentReader
 from reliquary_enrichment.postgres.record_store import PostgresEnrichmentRecordStore
-from reliquary_enrichment.probe.cli import _isolation_unchanged, prod_enrichment_counts
-from reliquary_enrichment.probe.export import export_records
-from reliquary_enrichment.probe.schema import create_probe_schema, drop_probe_schema
 from reliquary_enrichment.write_enrichment import WriteEnrichment
 
 # thinking-OFF for the qwen3 family (handoff §2); same mapping as the probe run.sh.
@@ -67,7 +67,7 @@ def execute_multipass(
     candidate_model: str,
     api_model: str | None = None,
     pdf_filenames: tuple[str, ...] = (),
-    slice_path: str = "probe/slice/chunk_ids.txt",
+    slice_path: str = _DEFAULT_SLICE,
     out_dir: str | Path,
     extra_body: dict | None = None,
     drop_after: bool = True,
@@ -121,6 +121,14 @@ def execute_multipass(
         elif not scored_and_exported:
             print(f"[multipass] KEEPING schema probe_{label}: pipeline/export did not complete "
                   "— investigate before dropping.", file=sys.stderr)
+    if not iso["prod_untouched"]:
+        # Re-homed from the deleted probe's breach-raise (§13 — keep the safety): the harness writes
+        # ONLY its throwaway schema, so a changed prod enrichment count is a hard alarm, not a logged
+        # footnote. Evidence is already in isolation.json (recorded in the finally above).
+        raise RuntimeError(
+            f"ISOLATION BREACH: prod enrichment changed during run {label!r} "
+            f"(before={before}, after={after}) — investigate immediately."
+        )
     return {"gate": gate.as_dict() if gate else None, **iso, "n_chunks": len(chunks)}
 
 
@@ -131,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("label", help="probe label -> probe_<label> schema + results dir")
     ap.add_argument("--api-model", default=None, help="LiteLLM alias to call (default big-thinker)")
     ap.add_argument("--pdf", action="append", default=[], help="page-range PDF filename (repeatable)")
-    ap.add_argument("--slice", default="probe/slice/chunk_ids.txt", help="frozen chunk_id slice")
+    ap.add_argument("--slice", default=_DEFAULT_SLICE, help="frozen chunk_id slice")
     ap.add_argument("--out", default=None, help="output dir (default multipass/results/<label>)")
     ap.add_argument("--keep-schema", action="store_true")
     args = ap.parse_args(argv)

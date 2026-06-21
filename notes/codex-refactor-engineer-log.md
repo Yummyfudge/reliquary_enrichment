@@ -175,6 +175,38 @@ Fake-backed unit tests (5) green; **8/8 Postgres checks pass against a real thro
 links_for_record / neighbors_via_links) — parity confirmed. The probe GIN on entity_refs + the §13
 rehome land in 5.5b.
 
+## Step 5.5b — §13 self-containment + claim_relevance throw — DONE (full suite 144 green)
+
+- **Rehomed 4+1 pieces into `multipass/`** (probe/ deleted in full): `isolation_schema.py` (throwaway
+  schema, carrying §6 deltas — −claim_relevance column, +GIN on entity_refs, +enrichment_meaning table
+  with NO vector/embedding), `export.py` (−claim_relevance), `isolation.py` (prod-untouched proof),
+  `locate.py` (locate_quote), and the frozen **slice** (now `multipass/slice/chunk_ids.txt`, package-
+  relative default). Rewired the 4 prod imports + slice defaults.
+- **claim_relevance THROWN** readers-first / models-field-last: record_store (INSERT/SELECT/recon),
+  write_enrichment (_Payload/_validate/render/build), mcp (param+payload), models (field LAST), and the
+  probe DDL. Choice (vs brief): record_store **omits** claim_relevance from the INSERT entirely (rather
+  than binding literal None) — this resolves the §6 probe-DDL-drop conflict (the probe table has no such
+  column) and still satisfies the NULL invariant on prod (nullable column, unwritten → NULL).
+- **Add #1 (Joe):** e2e §5 isolation proof run end-to-end through the rehomed harness — create-schema →
+  write → export → drop → prod-untouched, asserting the §6 structure + claim_relevance-clean artifact.
+  Codified as `tests/test_isolation_e2e_integration.py` (integration); passes. Isolation here is the
+  **stronger structural** form: the probe role is read-DENIED on prod enrichment, so before==after by
+  permission-denial — the harness can't even read prod, let alone write it.
+- **Add #2 (Joe):** no-cross-context invariant codified as `tests/test_no_cross_context.py` (zero
+  `from/import …probe`, zero `from/import context_reliquary`, probe/ gone). It immediately CAUGHT a real
+  pre-existing violation — `postgres/connection.py` imported `config` from `context_reliquary` — now
+  fixed (connection owns its defaults; real runs are env-driven; DB connectivity confirmed).
+- **Re-homed the probe's ISOLATION-BREACH hard-fail** into `execute_multipass` (the deleted probe raised
+  on prod-touched; the multipass only logged it — pre-existing gap, but §13 "move in what's worth
+  keeping" + Joe's "the one property we cannot regress"): now raises RuntimeError after recording
+  isolation.json. Never fires on the clean (read-denied) path.
+
+### Adversarial verification (2 lenses, executed greps + isolation-flow trace) — CLEAN
+Both required properties hold: isolation byte-identical to HEAD (never-drop-unscored + export-before-drop
+verified; prod-untouched proof fully wired), and zero stragglers (probe/ gone, 0 import failures, no live
+claim_relevance read/write, no-embed invariant holds, guardrail airtight against import-evasions). Fixed
+a stale `probe/schema.py` reference in the schema/008 comment.
+
 ## Step-7 note (gold-floor is ENTITY-LEVEL under record_type=entity_type)
 
 Joe confirmed: because each typed entity is its OWN record (record_type=entity_type), the gold-note

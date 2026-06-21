@@ -14,7 +14,7 @@ import pytest
 from reliquary_enrichment.grounding.types import Verdict
 from reliquary_enrichment.multipass.cli import execute_multipass
 from reliquary_enrichment.postgres.connection import connect, connection_kwargs
-from reliquary_enrichment.probe.schema import probe_schema_name
+from reliquary_enrichment.multipass.isolation_schema import probe_schema_name
 from tests.fakes.fake_judge import ConstantJudge
 
 pytestmark = pytest.mark.integration

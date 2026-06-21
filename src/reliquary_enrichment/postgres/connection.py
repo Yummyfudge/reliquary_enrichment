@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-"""Postgres connection — reuses the spine's cert-auth config, env-overridable for tests.
+"""Postgres connection — reliquary_enrichment's OWN cert-auth config, env-overridable for tests.
 
-Prod defaults come from ``context_reliquary.config`` (cert-auth to llm-db, the SAME DB the
-runtime app role already uses to read claim_chunks). ``RELIQUARY_ENRICHMENT_PG*`` env vars
-override every field so the ephemeral scratch Postgres (password auth, sslmode=disable) can
-be targeted in integration tests — the engineer never points this at prod.
+Connection defaults are this context's own — NO cross-context import (§12/§13: a needed thing moves
+IN, never imports across the boundary). ``RELIQUARY_ENRICHMENT_PG*`` env vars override every field (the
+probe role's creds + its own client cert), so real runs are fully env-driven; the bare defaults below
+are only the env-unset prod fallback. The ephemeral scratch Postgres (password auth, sslmode=disable)
+is targeted via the same env vars in integration tests — the engineer never points this at prod. The
+DB is the llm-db that also holds the read-only claim_chunks corpus.
 """
 
 import os
@@ -35,21 +37,13 @@ def qualified(schema: str, table: str) -> str:
             raise ValueError(f"invalid SQL identifier {part!r} (expected ^[a-z_][a-z0-9_]*$)")
     return f"{schema}.{table}"
 
-try:  # the spine is co-installed in the runtime env; fall back to env-only for tests.
-    from context_reliquary import config as _cr
-    _PROD = {
-        "host": _cr.POSTGRES_HOST,
-        "port": _cr.POSTGRES_PORT,
-        "dbname": _cr.POSTGRES_DBNAME,
-        "user": _cr.POSTGRES_USER,
-        "sslmode": _cr.POSTGRES_SSLMODE,
-        "sslrootcert": _cr.POSTGRES_SSLROOTCERT or None,
-        "sslcert": _cr.POSTGRES_SSLCERT or None,
-        "sslkey": _cr.POSTGRES_SSLKEY or None,
-    }
-except Exception:  # pragma: no cover - exercised only when spine is absent
-    _PROD = {"host": "192.168.1.53", "port": 5432, "dbname": "context_reliquary",
-             "user": "context_reliquary_app", "sslmode": "verify-full"}
+# reliquary_enrichment's OWN connection defaults — no cross-context import (§12/§13). Real runs set
+# RELIQUARY_ENRICHMENT_PG* (host/port/db/user/sslmode + the probe role's own cert paths) which override
+# every field; these are only the env-unset prod fallback (cert paths then come from env alone).
+_PROD = {
+    "host": "192.168.1.53", "port": 5432, "dbname": "context_reliquary",
+    "user": "context_reliquary_app", "sslmode": "verify-full",
+}
 
 
 def connection_kwargs() -> dict:
