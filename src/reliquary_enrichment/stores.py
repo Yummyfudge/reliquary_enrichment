@@ -34,6 +34,10 @@ class EnrichmentRecordStore(Protocol):
         """Distinct source_chunk_ids of the records citing entity_id (the discriminative-weight count)."""
         ...
 
+    def records_by_chunk(self, chunk_id: str) -> list[EnrichmentRecord]:
+        """All records grounded on a chunk (the codex walker's `entities_of(chunk)` seed; §5.4 #9)."""
+        ...
+
     def cooccurrence(self, entity_id: str) -> dict[str, int]:
         """For entities sharing a record with entity_id: other_entity_id -> count (excludes self)."""
         ...

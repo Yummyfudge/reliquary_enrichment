@@ -18,14 +18,19 @@ class FakeRecordStore:
     def get(self, record_id: str) -> EnrichmentRecord | None:
         return self.records.get(record_id)
 
-    # --- read APIs (mirror the Postgres jsonb-containment semantics; §5.2) ---
+    # --- read APIs (mirror the Postgres jsonb-containment semantics + ORDER BY record_id; §5.2) ---
     def records_by_entity(self, entity_id: str) -> list[EnrichmentRecord]:
-        return [r for r in self.records.values()
-                if any(ref.entity_id == entity_id for ref in r.entity_refs)]
+        return sorted((r for r in self.records.values()
+                       if any(ref.entity_id == entity_id for ref in r.entity_refs)),
+                      key=lambda r: r.record_id)
 
     def chunks_by_entity(self, entity_id: str) -> list[str]:
         # DISTINCT source_chunk_ids (an entity cited by 2 records in one chunk counts once).
         return list(dict.fromkeys(r.source_chunk_id for r in self.records_by_entity(entity_id)))
+
+    def records_by_chunk(self, chunk_id: str) -> list[EnrichmentRecord]:
+        return sorted((r for r in self.records.values() if r.source_chunk_id == chunk_id),
+                      key=lambda r: r.record_id)
 
     def cooccurrence(self, entity_id: str) -> dict[str, int]:
         counts: dict[str, int] = {}

@@ -332,6 +332,44 @@ ungrounded→reject, partial→accept+flag). It found the predicted brittleness 
   words like "The Claim" no longer false-flags); residual: genuinely novel Title-Case nouns still flag by
   design (the brief's intent — surface a codex gap). Every review reproduction re-run green.
 
+## Step 9 — codex_walk: the query-time AGENTIC-ASSEMBLY walker — DONE
+
+The bright line's other half: the larger answer is **assembled at query time by WALKING the codex**, not
+embedded (§3.1). `codex_walk.py` is that walk — pure structure, **no embeddings**:
+- **`CodexWalk`** over the three read-API stores. Primitive cited hops: `entities_of_chunk(chunk)` →
+  `records_for_entity(entity)` → `neighbors(record)`. `assemble(target_record, seed_chunk|seed_entity,
+  max_hops)` BFS-walks seed→target and returns the cited path + glass-box `examined` count.
+- **GROUNDING LAW as a structural read-time invariant:** only **cited** edges are walkable. A record with
+  a blank `evidence_span` and a link without the code-sliced `a_span`/`b_span` pair are **invisible to
+  assembly** — an ungrounded edge can never smuggle a path. `Hop.cited` is kind-specific.
+- **Added read API `records_by_chunk`** (protocol + Postgres + fake parity, same commit) — the chunk-seed
+  `entities_of(chunk)` needs it; served by `idx_enrichment_records_source_chunk` (migration 001).
+- **§10 acceptance (fixture-level):** from a B. Smith-mentioning chunk the walk reaches the gold reversal
+  record, and the decision-it-undid + date node (which share **no** entity with the seed) **only via
+  grounded links** — link-based assembly, not shared-entity coincidence; every hop cited.
+
+### Adversarial verification (3 lenses, executed against the REAL walker) — found + fixed 6
+Lens 2 cleared the BFS outright (no correctness bug: no dedup hazard, cycles/self-links terminate,
+`max_hops` exact, reach-via-links genuine — remove the link and the target goes unreachable). Lens 1 + 3
+found real gate/parity defects, **all fixed red→green:**
+- **HIGH** — "only cited edges walkable" tested dict **truthiness**, not a real span: a non-empty but
+  span-less link `evidence={"note":"x"}` was walkable and could smuggle a path. **Fix:** `_link_grounded`
+  requires the code-sliced `a_span`/`b_span` int-pair the linker actually writes (link_events.py:175);
+  `_span_grounded` requires a non-blank record span. The invariant is now structural at read time, not a
+  lean on writer discipline. **Plus migration 009** (authored; Architect applies) adds the matching
+  DB-side `CHECK (evidence ? 'a_span' AND evidence ? 'b_span')` on `enrichment_links` — mirroring the
+  records' nonblank check (003 had only `NOT NULL`); rejects no legitimate link.
+- **MED** — whitespace-only `evidence_span` read as a citation → `_span_grounded` strips (mirrors the DB
+  `enrichment_records_span_nonblank_chk`).
+- **MED** — `records_by_chunk` raised on a non-UUID chunk_id in Postgres but returned `[]` in the fake →
+  guard with `UUID(str(...))` like `get()`, returns `[]` (parity).
+- **MED** — walk path depended on arbitrary Postgres scan order → `ORDER BY record_id` on
+  `records_by_chunk`/`records_by_entity` + fake sorts to match → deterministic, fake==prod cited paths.
+- **LOW** — `cited` cross-key OR could smuggle citedness → kind-specific check closes it.
+- **LOW** — comment wrongly implied no `source_chunk_id` index → corrected (001 creates it).
+Positive confirmations re-run green: span-less/empty/None link evidence and blank spans all unwalkable;
+200 randomized adversarial trials (Lens 1) found 0 emitted-uncited-hop; the gold edge still assembles.
+
 ## Build order (§11) — in progress
 1–3 vocabulary → validators → canonicalizers · 4–5 multi-record extract → normalize ·
 5.5–6.5 read-APIs → discriminative-weight → gate · 7–8 linker → MeaningWriter ·

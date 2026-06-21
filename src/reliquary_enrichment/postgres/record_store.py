@@ -95,8 +95,11 @@ class PostgresEnrichmentRecordStore:
     def records_by_entity(self, entity_id: str) -> list[EnrichmentRecord]:
         probe = json.dumps([{"entity_id": entity_id}])
         with connect() as conn, conn.cursor() as cur:
+            # ORDER BY record_id: a stable, deterministic order so the codex walker yields reproducible
+            # (and fake-matching) cited paths — without it Postgres scan order is arbitrary across
+            # VACUUM/churn and could diverge from the fake on equal-length paths (step-9 review MED).
             cur.execute(f"SELECT {_REC_COLS} FROM {self._table} "
-                        "WHERE entity_refs @> %(probe)s::jsonb", {"probe": probe})
+                        "WHERE entity_refs @> %(probe)s::jsonb ORDER BY record_id", {"probe": probe})
             rows = cur.fetchall()
         return [_row_to_record(r) for r in rows]
 
@@ -107,6 +110,21 @@ class PostgresEnrichmentRecordStore:
                         "WHERE entity_refs @> %(probe)s::jsonb", {"probe": probe})
             rows = cur.fetchall()
         return [str(r["source_chunk_id"]) for r in rows]
+
+    def records_by_chunk(self, chunk_id: str) -> list[EnrichmentRecord]:
+        # The walker's chunk-seed (entities_of(chunk)). Plain equality on the source_chunk_id column,
+        # served by idx_enrichment_records_source_chunk (migration 001). Guard a non-UUID chunk_id the way
+        # get() does (the column is uuid; a malformed value would RAISE) so it returns [] like the fake —
+        # not a fake-vs-prod divergence (step-9 review MED). ORDER BY record_id for a deterministic walk.
+        try:
+            UUID(str(chunk_id))
+        except (ValueError, TypeError):
+            return []
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT {_REC_COLS} FROM {self._table} "
+                        "WHERE source_chunk_id = %(c)s ORDER BY record_id", {"c": chunk_id})
+            rows = cur.fetchall()
+        return [_row_to_record(r) for r in rows]
 
     def cooccurrence(self, entity_id: str) -> dict[str, int]:
         counts: dict[str, int] = {}
