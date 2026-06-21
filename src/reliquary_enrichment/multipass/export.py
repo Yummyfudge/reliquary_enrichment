@@ -100,3 +100,37 @@ def export_records(schema: str, out_dir: str | Path) -> int:
             lines.append("")
     (out / "records.txt").write_text("\n".join(lines))
     return len(recs)
+
+
+def _export_table(schema: str, table: str, columns: list[str], order_by: str, out_path: Path) -> int:
+    """Dump one probe table to jsonl (raw rows). Returns the row count."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT {', '.join(columns)} FROM {qualified(schema, table)} ORDER BY {order_by}")
+        rows = cur.fetchall()
+    with out_path.open("w") as fh:
+        for r in rows:
+            fh.write(json.dumps({c: r[c] for c in columns}, default=str, ensure_ascii=False) + "\n")
+    return len(rows)
+
+
+def export_codex(schema: str, out_dir: str | Path) -> dict:
+    """§5 raw-export-before-drop for the CODEX + MEANING artifacts (the two-artifact run): entities.jsonl,
+    links.jsonl, meaning.jsonl. Runs BEFORE the probe schema drops so the codex stays inspectable. The
+    grounded records are exported separately by ``export_records`` (the record artifact)."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    return {
+        "entities": _export_table(
+            schema, "codex_entities",
+            ["entity_id", "entity_type", "canonical", "aliases", "metadata", "first_seen_record", "flagged"],
+            "entity_type, canonical", out / "entities.jsonl"),
+        "links": _export_table(
+            schema, "enrichment_links",
+            ["link_id", "record_a", "record_b", "relation", "tier", "evidence", "confidence",
+             "provenance_validation", "event_entity", "flagged"],
+            "link_id", out / "links.jsonl"),
+        "meaning": _export_table(
+            schema, "enrichment_meaning",
+            ["meaning_id", "source_chunk_id", "claim_meaning"],
+            "source_chunk_id", out / "meaning.jsonl"),
+    }

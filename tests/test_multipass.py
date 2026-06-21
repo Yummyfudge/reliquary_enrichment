@@ -9,12 +9,10 @@ from reliquary_enrichment.multipass.inputs import page_range_from_filename
 from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext, PassResult
 from reliquary_enrichment.multipass.passes.pass1_prose import Pass1Prose, parse_prose_label
 from reliquary_enrichment.multipass.passes.pass2_objecttypes import Pass2ObjectTypes, parse_type_list
-from reliquary_enrichment.multipass.passes.pass2_9_consolidate import Pass2_9Consolidate, parse_consolidation
+from reliquary_enrichment.multipass.passes.pass2_9_normalize import EntityNormalizationPass
 from reliquary_enrichment.multipass.confidence import ConfidencePlateau
 from reliquary_enrichment.multipass.passes.pass3_fillvalues import Pass3FillValues
-from reliquary_enrichment.multipass.passes.pass4_keywords import Pass4Keywords, parse_keyword_list
-from reliquary_enrichment.multipass.passes.pass4_9_cleanup import Pass4_9Cleanup, clean_keyword
-from reliquary_enrichment.multipass.passes.pass5_meaning import Pass5Meaning, parse_meaning
+from reliquary_enrichment.multipass.cli import all_passes
 from reliquary_enrichment.multipass.gate import read_gate
 from reliquary_enrichment.multipass.parsing import EntityProposal, safe_json_array, safe_json_object
 from reliquary_enrichment.multipass.vocabulary import ENTITY_TYPES
@@ -38,7 +36,6 @@ def test_safe_json_array_never_raises_on_bad_fallback():
     assert safe_json_array("noise [not, valid, json,] tail") == []
     assert safe_json_array('["ok","good"]') == ["ok", "good"]
     assert parse_type_list('["status": "x"]') == []          # pass-2 parser stays alive
-    assert parse_keyword_list("garbage [x: y]") == []        # pass-4 parser stays alive
 
 
 def test_safe_json_object_never_raises():
@@ -135,28 +132,42 @@ def test_pass2_lists_present_closed_vocab_types():
     assert out == {"object_types": ["date", "actor"]} and toks == 5   # denial_reason dropped (off-vocab)
 
 
-def test_parse_consolidation_maps_every_raw_type():
-    canon, mapping = parse_consolidation(
-        '{"canonical":["status_change"],"mapping":{"status_update":"status_change"}}',
-        ["status_update", "date"])
-    assert mapping["status_update"] == "status_change"
-    assert mapping["date"] == "date"               # filled by identity fallback
-    canon2, map2 = parse_consolidation("junk", ["a", "b"])
-    assert map2 == {"a": "a", "b": "b"} and set(canon2) == {"a", "b"}
+# --- §7 pass sequence: the literal run order + codex-first positioning -----------------
+def test_all_passes_is_the_section7_literal_order():
+    assert [p.name for p in all_passes()] == [
+        "1_prose", "2_objecttypes", "3_fillvalues", "2_9_normalize",
+        "discriminative_weight", "cross_chunk_link", "5_meaning"]
 
 
-def test_pass2_9_keeps_raw_final_mapping():
-    prior = {"2_objecttypes": PassResult("2_objecttypes", {
-        "c1": {"object_types": ["status_change", "date"]},
-        "c2": {"object_types": ["status_update"]}})}
-    ctx = PassContext(model=FakeCompleter(
-        '{"canonical":["status_change","date"],"mapping":'
-        '{"status_change":"status_change","status_update":"status_change","date":"date"}}'),
-        model_name="f")
-    state = Pass2_9Consolidate().process_all([ChunkRef("c1", "x"), ChunkRef("c2", "y")], prior, ctx)
-    assert set(state) == {"raw", "raw_types", "final", "mapping"}
-    assert state["mapping"]["status_update"] == "status_change"
-    assert all(t in state["mapping"] for t in state["raw_types"])   # every raw type mapped
+def test_normalization_is_positioned_after_pass3_codex_first():
+    # the "2.9" SLOT must run AFTER Pass 3 (Pass 3 grounds instances; normalization resolves them).
+    names = [p.name for p in all_passes()]
+    assert names.index("2_9_normalize") > names.index("3_fillvalues")
+    assert names.index("cross_chunk_link") > names.index("discriminative_weight")  # linker needs themes
+    assert names[-1] == "5_meaning"                                                # meaning is last
+    # the thrown passes are GONE from the sequence
+    assert not any(n in names for n in ("4_keywords", "4_9_cleanup", "2_9_consolidate"))
+
+
+class _FakeResolver:
+    def resolve_or_create(self, etype, surface, *, first_seen_record=None):
+        from reliquary_enrichment.models import Entity
+        return Entity(entity_type=etype, canonical=surface)
+
+
+def test_normalization_buildability_requires_pass3_in_prior():
+    # §7 buildability guard: EntityNormalizationPass reads prior["3_fillvalues"] — positional codex-first.
+    from tests.fakes.fake_stores import FakeRecordStore
+    seen = {}
+    class _Probe(dict):
+        def get(self, k, default=None):
+            seen[k] = True
+            return super().get(k, default)
+    prior = _Probe({"3_fillvalues": PassResult("3_fillvalues", {"c": {"record_ids": []}})})
+    ctx = PassContext(model=FakeCompleter("[]"), model_name="f",
+                      extras={"entity_resolver": _FakeResolver(), "record_store": FakeRecordStore()})
+    EntityNormalizationPass().process_all([ChunkRef("c", "x")], prior, ctx)
+    assert seen.get("3_fillvalues") is True   # it sourced Pass 3's record_ids, not an earlier slot
 
 
 # --- confidence-plateau (Pass 3 retry bound) -----------------------------------------
@@ -237,45 +248,7 @@ def test_pass3_schema_falls_back_to_full_vocab_when_pass2_absent():
     assert seen[0] == ENTITY_TYPES           # no Pass 2 -> the full closed vocabulary
 
 
-# --- Pass 4 keywords + 4.9 cleanup ----------------------------------------------------
-def test_parse_keyword_list_lowercases_and_dedups():
-    assert parse_keyword_list('["Long COVID","long covid","B. Smith"]') == ["long covid", "b. smith"]
-    assert parse_keyword_list("not json") == []
-
-
-def test_pass4_process_chunk():
-    ctx = PassContext(model=FakeCompleter('["Reversal","mental health"]', tokens=4), model_name="f")
-    out, toks = Pass4Keywords().process_chunk(ChunkRef("c", "t"), {}, ctx)
-    assert out == {"keywords": ["reversal", "mental health"]} and toks == 4
-
-
-def test_pass4_9_cleanup_dedups_drops_trivial_keeps_glassbox():
-    assert clean_keyword("THE") == ""          # stopword dropped
-    assert clean_keyword("x") == ""            # too short dropped
-    assert clean_keyword(" Long  COVID ") == "long covid"
-    prior = {"4_keywords": PassResult("4_keywords", {
-        "c1": {"keywords": ["long covid", "the", "reversal"]},
-        "c2": {"keywords": ["Long COVID", "x"]}})}
-    state = Pass4_9Cleanup().process_all([ChunkRef("c1", "a"), ChunkRef("c2", "b")], prior,
-                                         PassContext(model=FakeCompleter(), model_name="f"))
-    assert set(state) == {"raw", "mapping", "final", "cleaned"}
-    assert "long covid" in state["final"] and "the" not in state["final"] and "x" not in state["final"]
-    assert state["cleaned"]["c2"] == ["long covid"]    # normalized + trivial dropped
-
-
-# --- Pass 5 meaning -------------------------------------------------------------------
-def test_parse_meaning_valid_and_fallback():
-    meaning, qs = parse_meaning('{"claim_meaning":"The reversal undid the approval.","questions_answered":["Why denied?"]}')
-    assert meaning == "The reversal undid the approval." and qs == ["Why denied?"]
-    m2, q2 = parse_meaning("just prose, no json")    # fallback keeps the prose
-    assert m2 == "just prose, no json" and q2 == []
-
-
-def test_pass5_process_chunk():
-    ctx = PassContext(model=FakeCompleter('{"claim_meaning":"m","questions_answered":["q"]}', tokens=9),
-                      model_name="f")
-    out, toks = Pass5Meaning().process_chunk(ChunkRef("c", "t"), {}, ctx)
-    assert out == {"claim_meaning": "m", "questions_answered": ["q"]} and toks == 9
+# --- Pass 4 (keywords/cleanup) is GONE; Pass 5 (MeaningWriterPass) lives in test_meaning_pass.py ---
 
 
 # --- GATE (per-chunk faithfulness) ----------------------------------------------------

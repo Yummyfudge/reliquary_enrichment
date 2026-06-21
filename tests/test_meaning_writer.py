@@ -150,6 +150,16 @@ def test_discriminativeness_rejects_substring_coincidence():
     assert has_discriminative_substance("Blacksmith tools were noted", GOLD_ENTITIES) is False
 
 
+def test_discriminativeness_date_is_gated_on_a_non_theme_date_entity():
+    # a concrete dated action counts ONLY when tied to a NON-THEME date entity — a THEME date, or a date
+    # the codex doesn't carry, is NOT substance (the step-10 review's date-token hole).
+    THEME_DATE = [{"canonical": "2025-01-01", "entity_type": "date", "aliases": [], "is_theme": True}]
+    DISCRIM_DATE = [{"canonical": "2024-02-18", "entity_type": "date", "aliases": [], "is_theme": False}]
+    assert has_discriminative_substance("Status note dated 2025-01-01", THEME_DATE) is False   # theme date
+    assert has_discriminative_substance("Reversed on 2025-01-01", []) is False                 # no date entity
+    assert has_discriminative_substance("Reversed on 2024-02-18", DISCRIM_DATE) is True         # non-theme date
+
+
 # --- the bright line: MeaningWriter never embeds ----------------------------
 def test_meaning_writer_stores_text_never_embeds():
     w, store = _writer()

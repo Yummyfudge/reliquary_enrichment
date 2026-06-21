@@ -54,8 +54,11 @@ class PostgresLinkStore:
     # --- read APIs (the codex walker's edge traversal; §5.2) ---
     def links_for_record(self, record_id: str) -> list[Link]:
         with connect() as conn, conn.cursor() as cur:
+            # ORDER BY link_id: the record reads got a deterministic order (step-9 review MED); the link
+            # read needs it too, else link-hop order — and the walk's path among equal-length alternatives
+            # — stays PG-scan-order-dependent and can diverge from the fake. The fake sorts to match.
             cur.execute(f"SELECT {_LINK_COLS} FROM {self._table} "
-                        "WHERE record_a = %(r)s OR record_b = %(r)s", {"r": record_id})
+                        "WHERE record_a = %(r)s OR record_b = %(r)s ORDER BY link_id", {"r": record_id})
             rows = cur.fetchall()
         return [_row_to_link(r) for r in rows]
 

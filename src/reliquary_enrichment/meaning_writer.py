@@ -68,16 +68,19 @@ def is_meta_phrase(meaning: str) -> bool:
 
 
 def has_discriminative_substance(meaning: str, resolved_entities: list[dict]) -> bool:
-    """True iff the meaning carries discriminative substance (brief §5.4 #7): a concrete date, OR a
-    DISTINCTIVE word token shared with a NON-THEME entity surface (word-level, so a surname-only / no-space
-    / titled paraphrase of B. Smith still resolves, while 'Smith' inside 'Blacksmith' does NOT, and a
-    theme-only meaning names nothing)."""
-    if _DATE_TOK.search(meaning or ""):                                 # a concrete dated action
-        return True
+    """True iff the meaning carries discriminative substance (brief §5.4 #7): a concrete dated action tied
+    to a NON-THEME date entity, OR a DISTINCTIVE word token shared with a NON-THEME entity surface (word-
+    level, so a surname-only / no-space / titled paraphrase of B. Smith still resolves, while 'Smith' inside
+    'Blacksmith' does NOT). A theme-only meaning — or one whose only date is a THEME date / a date the codex
+    doesn't carry — names no discriminator and is rejected (the date check is gated on a non-theme date
+    entity, never an unconditional pass)."""
+    has_date = bool(_DATE_TOK.search(meaning or ""))
     mtok = set(_TOK.findall((meaning or "").lower()))
     for ent in resolved_entities:
         if ent.get("is_theme"):
             continue
+        if has_date and ent.get("entity_type") == "date":              # concrete dated action (non-theme)
+            return True
         for surface in (ent.get("canonical"), *ent.get("aliases", ())):
             if _name_tokens(surface) & mtok:
                 return True

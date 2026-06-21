@@ -370,6 +370,51 @@ found real gate/parity defects, **all fixed red→green:**
 Positive confirmations re-run green: span-less/empty/None link evidence and blank spans all unwalkable;
 200 randomized adversarial trials (Lens 1) found 0 emitted-uncited-hop; the gold edge still assembles.
 
+## Step 10a — integration: §7 wiring + two-artifact persistence + MeaningWriterPass — DONE (build)
+
+The codex-refactor pass chain, wired end to end (the real-corpus RUN is 10b, needs the lane):
+- **`all_passes()` rewired to the §7 LITERAL order** (`cli.py`): Pass1 → Pass2 → Pass3 → EntityNormalization
+  (the "2.9" SLOT, positioned AFTER 3) → DiscriminativeWeight → CrossChunkLink → MeaningWriter. The list
+  index IS the run order; codex-first sequencing is positionally enforced (test: normalize after 3, link
+  after discriminative, meaning last).
+- **`MeaningWriterPass`** (rewrote `pass5_meaning.py`) + **`meaning_wiring.make_meaning_proposer`** — the
+  gated, embedded side wired as a Pass: assemble the chunk's resolved codex entities (theme-flag from §9),
+  model POINTS a local fact + verbatim span, CODE locates it, the gated MeaningWriter grounds/judges/stores.
+- **Deleted** `pass4_keywords`, `pass4_9_cleanup`, `pass2_9_consolidate` (untyped lexical bags → typed
+  entities + the theme-flag). Their tests removed; §7-order + buildability guards added.
+- **`_build_services`** — ONE shared GroundingCore + all four stores + every per-pass service as one extras
+  dict (records, links, meaning all judge against the SAME probe schema). **FLOOR-FIRST** (gold floor is
+  the first acceptance, exit 2 on fail) + **two-artifact export** (`export_records` + new `export_codex`:
+  entities/links/meaning jsonl, BEFORE drop) + isolation/drop unchanged. `review.py` rewired to the new
+  pass outputs.
+- **`test_multipass_pipeline_integration.py`** — the centerpiece: the FULL §7 chain over fakes (no lane/DB)
+  produces a codex where B. Smith stays a DISCRIMINATOR (12 fillers → cutoff 5, margin 3), the date is a
+  THEME, the gold EDGE forms (theme stoplisted), the FLOOR passes, the gated meaning stores, and the codex
+  is WALKABLE. 201 green / 13 deselected.
+
+### Adversarial verification (3 lenses, executed against the real pipeline) — found + fixed 4
+Lens 1 (wiring) CLEAN: every pass gets its extras (no KeyError), the core is genuinely shared, floor-first
++ export-before-drop + never-drop-unscored + breach-raise all hold across failure paths, theme-flags
+round-trip in-run. Lens 3 essentially clean (only unreachable defensive gaps; the one integration-marked
+failure is an env DB-privilege issue, not a regression). Fixed:
+- **(LOW, real source bug) meaning gate date hole** (`meaning_writer.py`): `has_discriminative_substance`
+  short-circuited on ANY date token BEFORE the theme check, so a THEME-date-only (or codex-absent-date)
+  meaning passed the hard gate and was stored. **Fix:** a date counts as substance ONLY when tied to a
+  NON-THEME date entity on the chunk (added `entity_type` to `resolved_entities_for_chunk`); regression
+  tests added.
+- **(MED, test fragility) cutoff knife-edge**: the fixture had B. Smith at degree 2 vs cutoff 3 (margin 1)
+  — ±1 filler flipped the whole §10 acceptance. **Fix:** 12 fillers → cutoff 5, margin 3 (robust to ±1);
+  real-corpus robustness already lives in `test_discriminative.py`.
+- **(MED, test over-claim) walk "via links"**: `assemble()` reached the gold record via the shared B. Smith
+  entity (mentions→cites), NOT over the link. **Fix:** the assertion is now honest — the gold record is
+  reachable via the codex AND the formed link is independently a walkable cited edge (`neighbors` →
+  relation `corroborates`); genuine link-ONLY reach stays proven in `test_codex_walk.py`, real-corpus in
+  10b.
+- **(LOW, observability) silent degradation**: a contained whole-state pass crash (e.g. discriminative)
+  emptied the theme stoplist yet the run still reported PASS. **Fix:** `execute_multipass` now collects
+  `pass_errors` from `{"error":...}` outputs, emits a DEGRADED warning, and returns them. (+ `review.py`
+  `_by_chunk` guards malformed jsonl.)
+
 ## Build order (§11) — in progress
 1–3 vocabulary → validators → canonicalizers · 4–5 multi-record extract → normalize ·
 5.5–6.5 read-APIs → discriminative-weight → gate · 7–8 linker → MeaningWriter ·

@@ -102,10 +102,11 @@ class FakeLinkStore:
         self.links[link.link_id] = link
         return link.link_id
 
-    # --- read APIs (the codex walker's edge traversal; §5.2) ---
+    # --- read APIs (the codex walker's edge traversal; §5.2; ORDER BY link_id for fake==prod paths) ---
     def links_for_record(self, record_id: str) -> list[Link]:
-        return [l for l in self.links.values()
-                if l.record_a == record_id or l.record_b == record_id]
+        return sorted((l for l in self.links.values()
+                       if l.record_a == record_id or l.record_b == record_id),
+                      key=lambda l: l.link_id)
 
     def neighbors_via_links(self, record_id: str) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []

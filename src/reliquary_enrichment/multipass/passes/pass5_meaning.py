@@ -1,55 +1,71 @@
 from __future__ import annotations
 
-"""Pass 5 — meaning. Per chunk, the claim-relevance significance (what the needle would embed).
+"""Pass 5 (slot) — MeaningWriterPass: the gated, GROUNDED, embedded LOCAL-FACT meaning (brief §5.4, §7).
 
-A short interpreted meaning + the questions the chunk answers — the interpretation tier
-(enrichment_meaning concept). Pass 5's output is what a later NEEDLE iteration embeds + ranks;
-for v0 it is produced + captured, the needle reading itself deferred.
+Replaces the old meta-summary Pass 5. The bright line's embedded side: per chunk, assemble the chunk's
+resolved codex entities (carrying the theme-flag from the discriminative pass), let the model PROPOSE a
+local-fact meaning + the verbatim span that grounds it, CODE locates the span, and the gated MeaningWriter
+does the rest — meta-phrase pre-filter -> HARD discriminativeness gate -> Tier.INTERPRETATION grounding ->
+hook flag -> store into enrichment_meaning. The meaning is the ONLY embedded artifact and NEVER routes
+through enrichment_records.
+
+Runs LAST (§7): the codex (entities + theme-flags) must exist before the discriminativeness gate can tell
+a discriminator from a theme. Injected via ctx.extras (meaning_writer, meaning_proposer, record_store,
+entity_store), so it is unit-testable with fakes — no lane needed to build.
 """
 
-import json
-import re
 from typing import Any
 
+from reliquary_enrichment.multipass.locate import locate_quote
 from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext, PassResult
 
-_SYSTEM = (
-    "In 1-2 sentences, state the claim-relevance MEANING of this chunk of an insurance claim "
-    "file — its significance to the claim decision/denial. Then list the questions it answers. "
-    'Reply with ONLY a JSON object: {"claim_meaning": "<1-2 sentences>", '
-    '"questions_answered": ["<question>", ...]}.'
-)
+
+def resolved_entities_for_chunk(record_store, entity_store, chunk_id: str) -> list[dict]:
+    """The chunk's resolved codex entities for the discriminativeness gate: {canonical, aliases, is_theme}.
+    Sourced from the chunk's grounded records' entity_refs -> the codex Entity (theme-flag from §9). Falls
+    back to the ref's own canonical (theme unknown -> False) if the entity isn't loadable."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for rec in record_store.records_by_chunk(chunk_id):
+        for ref in rec.entity_refs:
+            if ref.entity_id in seen:
+                continue
+            seen.add(ref.entity_id)
+            entity = entity_store.get(ref.entity_id) if entity_store else None
+            if entity is None:
+                out.append({"canonical": ref.canonical, "entity_type": ref.entity_type,
+                            "aliases": [], "is_theme": False})
+            else:
+                out.append({"canonical": entity.canonical, "entity_type": entity.entity_type,
+                            "aliases": list(entity.aliases),
+                            "is_theme": bool(entity.metadata.get("is_theme"))})
+    return out
 
 
-def parse_meaning(content: str) -> tuple[str, list[str]]:
-    """Parse {claim_meaning, questions_answered}; fall back to raw text as the meaning."""
-    raw = (content or "").strip()
-    obj = None
-    try:
-        obj = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        if m:
-            try:
-                obj = json.loads(m.group(0))
-            except json.JSONDecodeError:
-                obj = None
-    if isinstance(obj, dict):
-        meaning = str(obj.get("claim_meaning", "")).strip()
-        qs = obj.get("questions_answered")
-        questions = [str(q) for q in qs] if isinstance(qs, list) else []
-        if meaning:
-            return meaning, questions
-    return raw, []   # defensive: keep the model's prose as the meaning rather than lose it
-
-
-class Pass5Meaning(Pass):
+class MeaningWriterPass(Pass):
     name = "5_meaning"
     per_chunk = True
 
     def process_chunk(
         self, chunk: ChunkRef, prior: dict[str, PassResult], ctx: PassContext
     ) -> tuple[Any, int]:
-        content, tokens = ctx.model.complete(_SYSTEM, f"CHUNK:\n{chunk.text}")
-        meaning, questions = parse_meaning(content)
-        return {"claim_meaning": meaning, "questions_answered": questions}, tokens
+        writer = ctx.extras["meaning_writer"]
+        propose = ctx.extras["meaning_proposer"]
+        record_store = ctx.extras["record_store"]
+        entity_store = ctx.extras.get("entity_store")
+        ws = ctx.extras.get("meaning_workstream_id", "mp-meaning")
+
+        resolved = resolved_entities_for_chunk(record_store, entity_store, chunk.chunk_id)
+        obj, tokens = propose(chunk.text)
+        meaning = str(obj.get("meaning", "")).strip()
+        quote = str(obj.get("quote", "")).strip()
+        if not meaning or not quote:
+            return {"ok": False, "reason_code": "no_proposal"}, tokens
+        span = locate_quote(chunk.text, quote)             # CODE COPIES the span (grounding law)
+        if span is None:
+            return {"ok": False, "reason_code": "locate_miss"}, tokens
+        result = writer.write(
+            chunk_id=chunk.chunk_id, meaning=meaning, char_start=span[0], char_end=span[1],
+            resolved_entities=resolved, workstream_id=ws,
+        )
+        return result, tokens

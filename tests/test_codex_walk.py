@@ -178,3 +178,21 @@ def test_records_by_chunk_store_api():
     _, f = _codex()
     recs = f["rs"].records_by_chunk(SEED_CHUNK)
     assert [r.record_id for r in recs] == [f["r_seed"].record_id]
+
+
+def test_link_hop_surfaces_flagged_for_provenance():
+    # a judge-FLAGGED link is grounded + walkable, but the assembled path must SHOW it was flagged
+    # (provenance-first per-hop confidence) — step-9 review LOW.
+    w, f = _codex()
+    f["ls"].insert(Link(record_a=f["r_gold"].record_id, record_b=f["r_seed"].record_id, relation="cf",
+                        tier="interpretation", evidence={"a_span": [0, 4], "b_span": [0, 4]},
+                        provenance_validation={"verdict": "partial"}, flagged=True))
+    flags = {h.relation: h.citation["flagged"] for h in w.neighbors(f["r_gold"].record_id)}
+    assert flags["cf"] is True and flags["reverses"] is False
+
+
+def test_links_for_record_is_deterministic_by_link_id():
+    # link reads are ordered by link_id (fake==prod), so neighbors() / the walked path are reproducible.
+    _, f = _codex()
+    ids = [l.link_id for l in f["ls"].links_for_record(f["r_gold"].record_id)]
+    assert ids == sorted(ids)

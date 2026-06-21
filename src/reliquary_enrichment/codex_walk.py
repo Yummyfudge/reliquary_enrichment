@@ -124,7 +124,7 @@ class CodexWalk:
             other = link.record_b if link.record_a == record_id else link.record_a
             hops.append(Hop("link", link.relation, record_id, other, {
                 "link_id": link.link_id, "relation": link.relation,
-                "evidence": link.evidence, "tier": link.tier,
+                "evidence": link.evidence, "tier": link.tier, "flagged": link.flagged,
             }))
         return hops
 
