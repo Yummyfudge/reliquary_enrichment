@@ -42,6 +42,7 @@ from reliquary_enrichment.multipass.passes.pass5_meaning import MeaningWriterPas
 from reliquary_enrichment.multipass.passes.pass_link import CrossChunkLinkPass
 from reliquary_enrichment.multipass.pipeline import Pipeline
 from reliquary_enrichment.multipass.review import write_review
+from reliquary_enrichment.multipass.walk_trace import write_walk_trace
 from reliquary_enrichment.postgres.entity_store import PostgresEntityStore
 from reliquary_enrichment.postgres.fragment_reader import PostgresFragmentReader
 from reliquary_enrichment.postgres.link_store import PostgresLinkStore
@@ -156,6 +157,12 @@ def execute_multipass(
         export_records(schema, out)               # §5: raw records BEFORE drop
         codex = export_codex(schema, out)         # §5: codex + meaning (entities/links/meaning) BEFORE drop
         emit(f"[multipass] exported codex artifacts: {codex}")
+        # the gold-target assembly walk over the EXPORTED codex (survives the drop) — §10 (4) acceptance
+        trace = write_walk_trace(out)
+        wt = json.loads(trace.read_text())
+        emit(f"[multipass] gold walk: reached={wt.get('reached')} "
+             f"via_link={wt.get('reached_via_grounded_link')} "
+             f"gold_link_neighbours={len(wt.get('gold_link_neighbours', []))}")
         write_review(out)                          # basic enriched-data review.md (Joe's ask)
         scored_and_exported = True
     finally:

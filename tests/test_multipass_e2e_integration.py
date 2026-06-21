@@ -108,8 +108,11 @@ def test_multipass_v0_end_to_end(seeded, tmp_path):
     # §5: records AND the codex+meaning artifacts exported BEFORE drop; isolation populated; schema gone
     recs = (tmp_path / "records.jsonl").read_text().splitlines()
     assert recs and json.loads(recs[0])["evidence_span"]
-    for artifact in ("entities.jsonl", "links.jsonl", "meaning.jsonl"):
-        assert (tmp_path / artifact).exists(), f"missing codex export {artifact}"
+    for artifact in ("entities.jsonl", "links.jsonl", "meaning.jsonl", "floor.json", "gate.json",
+                     "isolation.json", "walk_trace.json"):
+        assert (tmp_path / artifact).exists(), f"missing run artifact {artifact}"
+    walk = json.loads((tmp_path / "walk_trace.json").read_text())
+    assert "reached" in walk and "gold_link_neighbours" in walk        # the §10 (4) trace is produced
     iso = json.loads((tmp_path / "isolation.json").read_text())
     assert iso["scored_and_exported"] is True and iso["prod_untouched"] is True
     with connect() as conn, conn.cursor() as cur:
