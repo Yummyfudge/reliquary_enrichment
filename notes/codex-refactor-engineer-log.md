@@ -160,6 +160,21 @@ can't bloat the glass box). **Documented, not changed:** mapping is `surface→e
 roman-numeral fold + `F06 4` internal-space collapse (neither in the slice); `Dr Smith`/`Dr. Smith`
 title-period **under**-merge (the safe direction — and the residual LLM flags it for curation).
 
+## Step 5.5a — store READ-API layer — DONE (full suite 164 green)
+
+Additive read APIs on the three stores (protocols in `stores.py`, Postgres impls, `fake_stores.py`
+parity in the same change):
+- `EntityStore`: `get`, `entities_of_type`, `set_entity_flags` (weight+is_theme via jsonb_set, PATCH
+  not clobber — the §9 discriminative-weight write path).
+- `EnrichmentRecordStore`: `records_by_entity`, `chunks_by_entity` (DISTINCT chunks), `cooccurrence` —
+  the entity→record reverse lookup via **jsonb-containment** (`entity_refs @> '[{"entity_id":...}]'`),
+  since entity_refs is denormalized jsonb (no join table).
+- `LinkStore`: `links_for_record`, `neighbors_via_links` (the walker's hop).
+Fake-backed unit tests (5) green; **8/8 Postgres checks pass against a real throwaway schema**
+(records_by_entity / chunks_by_entity / cooccurrence / get / entities_of_type / set_entity_flags /
+links_for_record / neighbors_via_links) — parity confirmed. The probe GIN on entity_refs + the §13
+rehome land in 5.5b.
+
 ## Step-7 note (gold-floor is ENTITY-LEVEL under record_type=entity_type)
 
 Joe confirmed: because each typed entity is its OWN record (record_type=entity_type), the gold-note

@@ -8,6 +8,7 @@ can target a throwaway probe_<label> schema.
 """
 
 import json
+from uuid import UUID
 
 from reliquary_enrichment.models import Entity
 from reliquary_enrichment.postgres.connection import DEFAULT_WRITE_SCHEMA, connect, qualified
@@ -59,6 +60,36 @@ class PostgresEntityStore:
                 f"UPDATE {self._table} SET aliases = aliases || %(a)s::jsonb "
                 "WHERE entity_id = %(id)s",
                 {"a": json.dumps([alias]), "id": entity_id},
+            )
+
+    # --- read APIs + the discriminative-weight write path (§5.2/§9) ---
+    def get(self, entity_id: str) -> Entity | None:
+        try:
+            UUID(str(entity_id))
+        except (ValueError, TypeError):
+            return None
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT {_COLS} FROM {self._table} WHERE entity_id = %(id)s", {"id": entity_id})
+            row = cur.fetchone()
+        return _row_to_entity(row) if row else None
+
+    def entities_of_type(self, entity_type: str) -> list[Entity]:
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT {_COLS} FROM {self._table} WHERE entity_type = %(t)s", {"t": entity_type})
+            rows = cur.fetchall()
+        return [_row_to_entity(r) for r in rows]
+
+    def set_entity_flags(self, entity_id: str, *, weight: int, is_theme: bool) -> None:
+        # PATCH weight + is_theme into metadata (preserve member_records/merged_into) — the only
+        # post-insert entity-metadata mutation besides event clustering (§9).
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE {self._table} "
+                "SET metadata = jsonb_set("
+                "      jsonb_set(metadata, '{weight}', %(w)s::jsonb), "
+                "      '{is_theme}', %(t)s::jsonb) "
+                "WHERE entity_id = %(id)s",
+                {"w": json.dumps(weight), "t": json.dumps(is_theme), "id": entity_id},
             )
 
     def event_for_record(self, record_id: str) -> Entity | None:

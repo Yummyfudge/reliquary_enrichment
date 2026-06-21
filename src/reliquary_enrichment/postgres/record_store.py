@@ -13,6 +13,30 @@ from uuid import UUID
 from reliquary_enrichment.models import EnrichmentRecord, EntityRef
 from reliquary_enrichment.postgres.connection import DEFAULT_WRITE_SCHEMA, connect, qualified
 
+_REC_COLS = (
+    "record_id, record_type, tier, fields, actor, event_date, claim_relevance, "
+    "confidence, source_chunk_id, char_start, char_end, page, document, "
+    "evidence_span, provenance_validation, entity_refs, flagged, supersedes"
+)
+
+
+def _row_to_record(row: dict) -> EnrichmentRecord:
+    refs = [
+        EntityRef(r["role"], r["entity_id"], r["entity_type"], r["canonical"])
+        for r in (row["entity_refs"] or [])
+    ]
+    return EnrichmentRecord(
+        record_type=row["record_type"], tier=row["tier"],
+        source_chunk_id=str(row["source_chunk_id"]), char_start=row["char_start"],
+        char_end=row["char_end"], evidence_span=row["evidence_span"],
+        provenance_validation=row["provenance_validation"], fields=row["fields"] or {},
+        actor=row["actor"], event_date=row["event_date"],
+        claim_relevance=row["claim_relevance"], confidence=row["confidence"],
+        page=row["page"], document=row["document"], entity_refs=refs,
+        flagged=row["flagged"], supersedes=str(row["supersedes"]) if row["supersedes"] else None,
+        record_id=str(row["record_id"]),
+    )
+
 
 class PostgresEnrichmentRecordStore:
     def __init__(self, *, schema: str = DEFAULT_WRITE_SCHEMA) -> None:
@@ -60,29 +84,33 @@ class PostgresEnrichmentRecordStore:
             UUID(str(record_id))
         except (ValueError, TypeError):
             return None
-        sql = f"""
-            SELECT record_id, record_type, tier, fields, actor, event_date, claim_relevance,
-                   confidence, source_chunk_id, char_start, char_end, page, document,
-                   evidence_span, provenance_validation, entity_refs, flagged, supersedes
-            FROM {self._table} WHERE record_id = %(record_id)s
-        """
         with connect() as conn, conn.cursor() as cur:
-            cur.execute(sql, {"record_id": record_id})
+            cur.execute(f"SELECT {_REC_COLS} FROM {self._table} WHERE record_id = %(record_id)s",
+                        {"record_id": record_id})
             row = cur.fetchone()
-        if not row:
-            return None
-        refs = [
-            EntityRef(r["role"], r["entity_id"], r["entity_type"], r["canonical"])
-            for r in (row["entity_refs"] or [])
-        ]
-        return EnrichmentRecord(
-            record_type=row["record_type"], tier=row["tier"],
-            source_chunk_id=str(row["source_chunk_id"]), char_start=row["char_start"],
-            char_end=row["char_end"], evidence_span=row["evidence_span"],
-            provenance_validation=row["provenance_validation"], fields=row["fields"] or {},
-            actor=row["actor"], event_date=row["event_date"],
-            claim_relevance=row["claim_relevance"], confidence=row["confidence"],
-            page=row["page"], document=row["document"], entity_refs=refs,
-            flagged=row["flagged"], supersedes=str(row["supersedes"]) if row["supersedes"] else None,
-            record_id=str(row["record_id"]),
-        )
+        return _row_to_record(row) if row else None
+
+    # --- read APIs: entity -> record reverse lookup via jsonb-containment (no join table) ---
+    def records_by_entity(self, entity_id: str) -> list[EnrichmentRecord]:
+        probe = json.dumps([{"entity_id": entity_id}])
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT {_REC_COLS} FROM {self._table} "
+                        "WHERE entity_refs @> %(probe)s::jsonb", {"probe": probe})
+            rows = cur.fetchall()
+        return [_row_to_record(r) for r in rows]
+
+    def chunks_by_entity(self, entity_id: str) -> list[str]:
+        probe = json.dumps([{"entity_id": entity_id}])
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT DISTINCT source_chunk_id FROM {self._table} "
+                        "WHERE entity_refs @> %(probe)s::jsonb", {"probe": probe})
+            rows = cur.fetchall()
+        return [str(r["source_chunk_id"]) for r in rows]
+
+    def cooccurrence(self, entity_id: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for record in self.records_by_entity(entity_id):       # Python-side for fake parity
+            for ref in record.entity_refs:
+                if ref.entity_id != entity_id:
+                    counts[ref.entity_id] = counts.get(ref.entity_id, 0) + 1
+        return counts
