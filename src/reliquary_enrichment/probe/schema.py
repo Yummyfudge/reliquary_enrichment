@@ -55,7 +55,7 @@ def _tables_ddl(schema: str) -> str:
         CREATE TABLE IF NOT EXISTS {entities} (
             entity_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             entity_type text NOT NULL
-                CHECK (entity_type IN ('actor','date','event','document','provision','code')),
+                CHECK (entity_type IN ('actor','date','event','document','provision','code','location')),
             canonical text NOT NULL,
             aliases jsonb NOT NULL DEFAULT '[]'::jsonb,
             metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
