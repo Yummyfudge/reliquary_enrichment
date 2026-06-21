@@ -232,6 +232,34 @@ date(3)/F06.4(28) BELOW the cutoff, themes "the claim"(76)/claimant(82)/Long COV
   clean for codes/dates; some real clinical/role surfaces (RTW, fatigue, brain fog) crowd the cutoff —
   inherently borderline, tunable via the knob; the named anchors are safe.
 
+## GOLD-DATE PIN (FLAG-7 owed deliverable) — RESOLVED
+
+Mined the corpus for the B. Smith reversal date (gold note `89503c71`, doc
+`...Aflac_claim_file_2025-03-30-final.txt`):
+- The **reversal record itself is UNDATED in-text** (confirmed) — "Body Reviewed with manager B. Smith:
+  Place claim back to a Mental Health limitation…" carries no date. So the date is soft/linked, never
+  grounded-on-the-gold-chunk (matches the §8d corrected floor).
+- "Feb 18" is **NOT a single value** in the corpus — it appears across **2023, 2024, AND 2025** as
+  document timestamps (`2/18/2023`×8, `2-18-23`×4, `2/18/2024`+`2-18-2024`+`2-18-24` ≈5, `2/18/2025`+
+  `2/18/25` ≈3). The one nearest the reversal context is `2/18/2024` (a C-AUTH doc "Last Modified
+  2/18/2024, 3:06 PM").
+- **PIN: the authoritative reversal date is `2024-02-18`** (soft/linked, captured AS-IS) — NOT the
+  brief's original `2025-02-18` (that was unverified and is wrong). It is genuinely ambiguous in the
+  corpus and is **NOT a hard-floor requirement**; the floor is entity-level on the gold chunk's OWN text
+  (B. Smith actor + the reversal event/content). For the brief/notes correction: gold date → 2024-02-18.
+
+## DEFERRED DECISION — theme-as-qualifier on links (Joe, step 7 addition)
+
+CrossChunkLink anchors on its shared **non-hub/specific** entity (stoplist), and ALSO **records** the
+shared **theme**-flagged entities as link metadata (`evidence.shared_themes`) — captured, **never acted
+on** (no boost / no ranking / no effect on which links form, the floor, or the walk). A guardrail test
+asserts `shared_themes` never influences link creation/ranking. WHY: makes the deferred theme-as-qualifier
+feature **measurable without building it** — from the first real run we can estimate applicability
+(how often a specific-anchored link also shares a theme) and measure value offline (re-rank links with vs
+without theme-boost against the gold-note acceptance), then decide build-or-not from data. **Resolved
+after the first real grounded run**, not a permanent defer. (Joins the deferred list: 0.4 theme-fraction
+re-validation; this; the needle/CRQ-001.)
+
 ## Step-7 note (gold-floor is ENTITY-LEVEL under record_type=entity_type)
 
 Joe confirmed: because each typed entity is its OWN record (record_type=entity_type), the gold-note
