@@ -291,6 +291,47 @@ floor is entity-level — chunk `89503c71` grounds a **`B. Smith` actor entity A
 entity as SEPARATE records** (not one record carrying both). Build the floor gate (step 7/12) to
 assert the actor entity + the reversal event/content, each on its own grounded record.
 
+## Step 8 — gated MeaningWriter + meaning_store (the embedded side of the bright line) — DONE
+
+The meaning side, SEPARATE from `write_enrichment` (meaning NEVER routes through enrichment_records):
+- **`meaning_writer.py`** — pipeline, cheap checks first: (1) META-PHRASE pre-filter (kill the
+  "this chunk indicates / the significance to the claim is / what this means for the denial is" family);
+  (2) HARD DISCRIMINATIVENESS gate (REJECT, not flag) — the ONLY trivia defense, since the judge only
+  checks non-contradiction; (3) GROUNDING at `Tier.INTERPRETATION` via the shared GroundingCore
+  (point→copy→judge→attest); (4) HOOK-resolution check (FLAG, not reject) for a capitalized/date span
+  the codex doesn't carry. Stores ONLY `(source_chunk_id, claim_meaning)`; the attestation + flag ride
+  in the write RESULT, not the row (the 004 schema has no provenance column — meaning-provenance-on-row
+  is the logged open question).
+- **`postgres/meaning_store.py`** — the ONLY writer of `enrichment_meaning`; `set_embedding` is the
+  EXCLUSIVE embedding-write path (deferred needle §5.4 #11 — nothing embeds today).
+- **Bright-line guardrail** (`test_no_cross_context.py`): a regex sweep proves `meaning_store.py` is the
+  sole file that ever writes an embedding — fails the suite if anything else embeds.
+
+### Two-pole calibration (Joe's acceptance) + adversarial verification (2 lenses) — HOLDS
+Both poles asserted BEFORE the first scored run: "Cheers, Joe" / theme-only OUT (`non_discriminative`),
+the gold local fact ("Manager B. Smith placed the claim back under the Mental Health limitation") IN
+(discriminative + grounded + hooks resolve). The review confirmed the bright line and grounding are
+SOLID (no enrichment_records / write_enrichment / set_embedding from the writer; grounds at INTERPRETATION;
+ungrounded→reject, partial→accept+flag). It found the predicted brittleness in the two regex gates —
+**4 real findings, all fixed (red→green):**
+- **HIGH false-reject** (the exact risk Joe named): the discriminativeness gate did a LITERAL substring
+  match of the EXACT entity surface, so a discriminative gold paraphrase naming the SAME B. Smith entity
+  via surname-only ("Smith…"), no-space ("B.Smith"), or title ("Dr. Smith") — without ALSO quoting the
+  provision verbatim — was wrongly rejected (the provision phrase was masking it in the happy path).
+  **Fix:** word-level distinctive-token overlap (`_name_tokens`, ≥3-char non-common tokens), so any
+  natural actor-surface paraphrase resolves the entity.
+- **MED false-accept:** the same substring test matched 'Smith' inside 'Blacksmith' (not word-boundary
+  aware). **Fix:** the token approach is word-level, not infix — 'Blacksmith' no longer matches 'Smith'.
+- **HIGH meta under-reject:** "What this means for the denial is…" evaded the regex and (if it carried a
+  non-theme entity) would be STORED. **Fix:** the meta regex now anchors on the meta SUBJECT (this
+  chunk/record, the significance, what this means), catching the evader.
+- **MED meta over-reject:** the old 4th alternative killed ANY "shows/reflects/documents that" regardless
+  of subject — over-rejecting legit facts like "Dr. Smith shows that the MRI is normal". **Fix:** the
+  meta-subject anchor means a verb with a REAL subject is a fact, not meta.
+- Hook precision improved alongside (token-based resolution, name-token filter so Title-Case of common
+  words like "The Claim" no longer false-flags); residual: genuinely novel Title-Case nouns still flag by
+  design (the brief's intent — surface a codex gap). Every review reproduction re-run green.
+
 ## Build order (§11) — in progress
 1–3 vocabulary → validators → canonicalizers · 4–5 multi-record extract → normalize ·
 5.5–6.5 read-APIs → discriminative-weight → gate · 7–8 linker → MeaningWriter ·

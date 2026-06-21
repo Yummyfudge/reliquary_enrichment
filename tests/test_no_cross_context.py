@@ -32,3 +32,13 @@ def test_no_context_reliquary_python_imports():
 
 def test_probe_package_is_gone():
     assert not (PKG / "probe").exists(), "probe/ must be deleted in full (§13)"
+
+
+_EMBED_WRITE = re.compile(r"SET\s+embedding|::vector|\bembedding\s*=\s*%", re.I)
+
+
+def test_bright_line_only_meaning_store_writes_an_embedding():
+    # The bright line (brief §3.1/§5.3): enrichment_meaning.embedding is the ONLY embedded artifact, and
+    # ONLY postgres/meaning_store.py may write it. Fails the suite if anything else embeds.
+    writers = [str(p.relative_to(PKG)) for p in PKG.rglob("*.py") if _EMBED_WRITE.search(p.read_text())]
+    assert writers == ["postgres/meaning_store.py"], writers
