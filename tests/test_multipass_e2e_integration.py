@@ -37,17 +37,18 @@ class PromptRoutingFake:
         s = system.lower()
         if "prose" in s and "non_prose" in s:
             return "prose", 3
-        if "types of records" in s:
-            return '["status_change","date"]', 4
+        if "entity types are present" in s:
+            return '["actor","date"]', 4              # closed-vocab subset present
         if "canonical schema" in s:
-            return ('{"canonical":["status_change","date"],'
-                    '"mapping":{"status_change":"status_change","date":"date"}}'), 4
-        if "extract one grounded record" in s:
-            chunk = user.split("CHUNK:\n", 1)[-1]
-            quote = chunk[:40]                       # verbatim prefix -> locate_quote succeeds
-            return json.dumps({"quote": quote, "record_type": "status_change", "tier": "fact",
-                               "fields": {}, "actor": None, "event_date": None,
-                               "confidence": 0.9}), 8
+            return ('{"canonical":["actor","date"],'
+                    '"mapping":{"actor":"actor","date":"date"}}'), 4
+        if "extract every typed entity" in s:
+            chunk = user.split("CHUNK:\n", 1)[-1].strip()   # whole chunk -> locate_quote succeeds
+            # multi-record batch: an actor record + a date record, each grounded on the chunk.
+            return json.dumps([
+                {"type": "actor", "surface": "B. Smith", "quote": chunk, "tier": "fact", "confidence": 0.9},
+                {"type": "date", "surface": "2025-02-18", "quote": chunk, "tier": "fact", "confidence": 0.9},
+            ]), 8
         if "signal keywords" in s:
             return '["reversal","mental health"]', 4
         if "claim-relevance meaning" in s:

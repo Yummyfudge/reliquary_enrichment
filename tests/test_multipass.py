@@ -16,7 +16,8 @@ from reliquary_enrichment.multipass.passes.pass4_keywords import Pass4Keywords, 
 from reliquary_enrichment.multipass.passes.pass4_9_cleanup import Pass4_9Cleanup, clean_keyword
 from reliquary_enrichment.multipass.passes.pass5_meaning import Pass5Meaning, parse_meaning
 from reliquary_enrichment.multipass.gate import read_gate
-from reliquary_enrichment.multipass.parsing import safe_json_array, safe_json_object
+from reliquary_enrichment.multipass.parsing import EntityProposal, safe_json_array, safe_json_object
+from reliquary_enrichment.multipass.vocabulary import ENTITY_TYPES
 from reliquary_enrichment.multipass.pipeline import Pipeline
 
 
@@ -122,16 +123,16 @@ def test_pass1_classifies_each_chunk():
 
 
 # --- Pass 2 object-types + 2.9 consolidate --------------------------------------------
-def test_parse_type_list_normalizes_and_dedups():
-    assert parse_type_list('["Status Change","status_change","date"]') == ["status_change", "date"]
-    assert parse_type_list('noise ["actor",{"name":"Task Note"}] tail') == ["actor", "task_note"]
+def test_parse_type_list_keeps_only_closed_vocab():
+    assert parse_type_list('["date","Actor","status_change","code"]') == ["date", "actor", "code"]
+    assert parse_type_list('["Long COVID","reversal"]') == []      # off-vocab dropped
     assert parse_type_list("not json") == []
 
 
-def test_pass2_process_chunk():
-    ctx = PassContext(model=FakeCompleter('["date","Actor"]', tokens=5), model_name="f")
+def test_pass2_lists_present_closed_vocab_types():
+    ctx = PassContext(model=FakeCompleter('["date","Actor","denial_reason"]', tokens=5), model_name="f")
     out, toks = Pass2ObjectTypes().process_chunk(ChunkRef("c", "t"), {}, ctx)
-    assert out == {"object_types": ["date", "actor"]} and toks == 5
+    assert out == {"object_types": ["date", "actor"]} and toks == 5   # denial_reason dropped (off-vocab)
 
 
 def test_parse_consolidation_maps_every_raw_type():
@@ -186,30 +187,54 @@ def test_plateau_bound_emerges_from_epsilon():
     assert cont <= 11                  # ~1/epsilon + first; bounded, no magic count
 
 
-# --- Pass 3 fill-values loop ----------------------------------------------------------
-def test_pass3_grounded_on_first_attempt():
-    pr = FakeProposer([({"confidence": 0.9, "record_type": "x"}, 10)])
-    gr = FakeGrounder([{"ok": True, "record_id": "r1"}])
+# --- Pass 3 multi-record fill-values loop ---------------------------------------------
+def _P(type_, quote, confidence=0.9):
+    return EntityProposal(type=type_, quote=quote, surface=quote, confidence=confidence)
+
+
+def test_pass3_grounds_a_batch_of_typed_entities():
+    pr = FakeProposer([([_P("actor", "B. Smith"), _P("date", "2025-02-18")], 10)])
+    gr = FakeGrounder([{"ok": True, "record_id": "r-actor"}, {"ok": True, "record_id": "r-date"}])
     out, toks = Pass3FillValues().process_chunk(ChunkRef("c", "t"), {}, _pass3_ctx(pr, gr))
-    assert out["grounded"] and out["record_id"] == "r1" and out["attempts"] == 1 and toks == 10
+    assert out["grounded"] and out["n_grounded"] == 2 and out["attempts"] == 1 and toks == 10
+    assert set(out["record_ids"]) == {"r-actor", "r-date"}
 
 
 def test_pass3_bounce_then_grounded_threads_judge_feedback():
-    pr = FakeProposer([({"confidence": 0.6}, 5), ({"confidence": 0.8}, 6)])
+    pr = FakeProposer([([_P("date", "bad", 0.6)], 5), ([_P("date", "2025-02-18", 0.8)], 6)])
     gr = FakeGrounder([{"ok": False, "detail": "date drifted", "reason_code": "ungrounded_fact"},
                        {"ok": True, "record_id": "r2"}])
     out, toks = Pass3FillValues().process_chunk(ChunkRef("c", "t"), {}, _pass3_ctx(pr, gr))
-    assert out["grounded"] and out["attempts"] == 2 and toks == 11
-    assert pr.feedbacks == [None, "date drifted"]      # judge feedback shaped the retry
+    assert out["grounded"] and out["n_grounded"] == 1 and out["record_ids"] == ["r2"]
+    assert out["attempts"] == 2 and toks == 11
+    assert pr.feedbacks == [None, "ungrounded_fact: date drifted"]   # judge feedback shaped the retry
 
 
-def test_pass3_plateau_gives_up_judge_verdict_stands():
-    pr = FakeProposer([({"confidence": 0.6}, 5), ({"confidence": 0.61}, 5)])  # 0.61 < 0.6+0.05
-    gr = FakeGrounder([{"ok": False, "detail": "no", "reason_code": "ungrounded_fact"}])
+def test_pass3_plateau_gives_up_on_grounded_fraction():
+    pr = FakeProposer([([_P("date", "x", 0.6)], 5), ([_P("date", "x", 0.61)], 5)])
+    gr = FakeGrounder([{"ok": False, "detail": "no", "reason_code": "ungrounded_fact"},
+                       {"ok": False, "detail": "no", "reason_code": "ungrounded_fact"}])
     out, _ = Pass3FillValues(epsilon=0.05).process_chunk(ChunkRef("c", "t"), {}, _pass3_ctx(pr, gr))
-    assert out["grounded"] is False and out["attempts"] == 2
-    assert out["confidence_trajectory"] == [0.6, 0.61]
-    assert out["reason_code"] == "ungrounded_fact"      # the last judge verdict stands
+    assert out["grounded"] is False and out["n_grounded"] == 0 and out["attempts"] == 2
+    assert out["confidence_trajectory"] == [0.0, 0.0]      # grounded-FRACTION trajectory
+    assert out["reason_code"] == "ungrounded_fact"
+
+
+def test_pass3_schema_from_vocabulary_narrowed_by_pass2_not_consolidate():
+    seen: list = []
+    def proposer(chunk, schema, feedback):
+        seen.append(list(schema)); return [], 1
+    prior = {"2_objecttypes": PassResult("2_objecttypes", {"c": {"object_types": ["actor", "date"]}})}
+    Pass3FillValues().process_chunk(ChunkRef("c", "t"), prior, _pass3_ctx(proposer, FakeGrounder([])))
+    assert seen[0] == ["actor", "date"]      # narrowed by Pass 2, NOT read from 2_9_consolidate
+
+
+def test_pass3_schema_falls_back_to_full_vocab_when_pass2_absent():
+    seen: list = []
+    def proposer(chunk, schema, feedback):
+        seen.append(set(schema)); return [], 1
+    Pass3FillValues().process_chunk(ChunkRef("c", "t"), {}, _pass3_ctx(proposer, FakeGrounder([])))
+    assert seen[0] == ENTITY_TYPES           # no Pass 2 -> the full closed vocabulary
 
 
 # --- Pass 4 keywords + 4.9 cleanup ----------------------------------------------------

@@ -107,6 +107,40 @@ near it. Architect confirmed this was an over-spec and corrected the brief:
 - §8d required-edges + the §5.2 Pass-5 example were corrected to match (dated only when the chunk's
   own text carries a date). Cleared to build the floor at step 7/12 on the corrected spec.
 
+## Step 4 — multi-record typed-entity extraction — DONE (full suite 149 green)
+
+- **pass2** now names the **closed-vocab** types present (filtered to `ENTITY_TYPES`).
+- **fill_wiring** proposer returns a **list** of `EntityProposal`s (validated, bad items dropped);
+  grounder grounds **each** via one `write_enrichment.write` (actor→actor, date→event_date,
+  code/location/document/provision/event→`fields[type]`, record_type=entity_type).
+- **pass3** data-flow **rewired** (schema = `vocabulary.ENTITY_TYPES` narrowed by `prior["2_objecttypes"]`,
+  **not** `prior["2_9_consolidate"]`); propose→ground→plateau loop kept, now wrapping the per-chunk
+  batch with the plateau on **grounded-fraction** (Joe-confirmed). Output adds record_ids/n_grounded;
+  keeps grounded/reason_code/attempts for the gate.
+- **`write_enrichment._resolve_entities`** widened to resolve every `fields`-carried typed entity
+  (code/location/document/provision) + EntityRefs; grounding LAW (resolve/slice/judge/attest) untouched.
+
+### Adversarial verification (3 lenses, executed repros) — CLEAN on the core invariant
+
+Nothing reaches storage ungrounded (every record still flows through `write_enrichment.write`); the
+degenerate render branch is unreachable from Pass 3 (validate requires non-empty surface); record_type
+=entity_type does NOT resurrect the "judge demands the type word" bug (record_type excluded from the
+claim; the type appears only as a JSON field KEY, and the judge checks values); loop terminates within
+`max_attempts` in every case; best-attempt record selection is correct. **Fixed:** dead `_FIELD_TYPES`
+constant in fill_wiring.py removed. **Observations (no change):** (a) stray candidate `fields` can spawn
+extra entities, but only judge-gated ones (value must be in the span) — acceptable; (b) `ConfidencePlateau`
+stops one attempt early on an exactly-epsilon gain (float rounding) — in §5.1-KEEP `confidence.py`,
+bounded/conservative, left untouched; (c) the `len(ok)==n_proposed` all-grounded short-circuit can stop
+before a retry that might propose MORE entities — matches the brief's design (the model proposes the full
+batch; the loop retries bounces), a model-recall/cost tradeoff, not a loop bug.
+
+## Step-7 note (gold-floor is ENTITY-LEVEL under record_type=entity_type)
+
+Joe confirmed: because each typed entity is its OWN record (record_type=entity_type), the gold-note
+floor is entity-level — chunk `89503c71` grounds a **`B. Smith` actor entity AND the reversal event
+entity as SEPARATE records** (not one record carrying both). Build the floor gate (step 7/12) to
+assert the actor entity + the reversal event/content, each on its own grounded record.
+
 ## Build order (§11) — in progress
 1–3 vocabulary → validators → canonicalizers · 4–5 multi-record extract → normalize ·
 5.5–6.5 read-APIs → discriminative-weight → gate · 7–8 linker → MeaningWriter ·

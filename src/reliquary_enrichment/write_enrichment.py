@@ -25,6 +25,10 @@ from reliquary_enrichment.stores import EnrichmentRecordStore
 
 _TIERS = {t.value for t in Tier}
 
+# Typed entities carried in a record's `fields` that resolve to Codex Entities (besides the
+# dedicated actor/event_date payload slots). For these, the EntityRef.role IS the entity_type.
+_FIELD_ENTITY_TYPES = ("code", "location", "document", "provision")
+
 
 @dataclass(frozen=True, slots=True)
 class _Payload:
@@ -187,7 +191,8 @@ class WriteEnrichment:
             },
         )
 
-        # Step 9: resolve judge-validated actor/event_date to Codex Entities.
+        # Step 9: resolve EVERY judge-validated typed entity to Codex Entities
+        # (actor/date from slots; code/location/document/provision from fields).
         record = EnrichmentRecord(
             record_type=p.record_type,
             tier=str(p.tier),
@@ -221,6 +226,9 @@ class WriteEnrichment:
         }
 
     def _resolve_entities(self, p: _Payload, record_id: str) -> list:
+        """Resolve every judge-validated typed entity to a Codex Entity + return its EntityRefs
+        (brief §5.2): actor + date from the dedicated slots, code/location/document/provision from
+        `fields`. resolve_or_create's alias-not-merge contract is unchanged."""
         refs = []
         if p.actor:
             entity = self._entities.resolve_or_create(
@@ -232,4 +240,11 @@ class WriteEnrichment:
                 "date", p.event_date, first_seen_record=record_id
             )
             refs.append(self._entities.ref_for("event_date", entity))
+        for etype in _FIELD_ENTITY_TYPES:
+            value = p.fields.get(etype)
+            if isinstance(value, str) and value.strip():
+                entity = self._entities.resolve_or_create(
+                    etype, value, first_seen_record=record_id
+                )
+                refs.append(self._entities.ref_for(etype, entity))
         return refs
