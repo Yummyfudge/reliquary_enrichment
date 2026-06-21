@@ -207,6 +207,31 @@ verified; prod-untouched proof fully wired), and zero stragglers (probe/ gone, 0
 claim_relevance read/write, no-embed invariant holds, guardrail airtight against import-evasions). Fixed
 a stale `probe/schema.py` reference in the schema/008 comment.
 
+## Step 6 + 6.5 — discriminative-weight + theme-flag + gate-substance — DONE (full suite 151 green)
+
+- **`discriminative.py`** (DiscriminativeWeightPass, per_chunk=False, NO LLM): weight = distinct grounded
+  chunk-degree (`chunks_by_entity`); is_theme = weight >= cutoff; persists via `set_entity_flags`; emits
+  the theme **stoplist** for the linker (§8). Themes are kept-never-deleted, stoplisted, down-weighted.
+- **Gate (6.5)**: coverage = a grounded record carrying a **NON-THEME typed entity** (a trivial grounded
+  sign-off or a theme-only chunk does NOT count). Optional stores → back-compat (grounded-anything) until
+  step-9 wiring; never rejects (measures only); never crashes on bad input.
+
+### LOAD-BEARING calibration (Joe) + adversarial robustness fix
+The known entities classify correctly against their REAL slice degrees: discriminators B. Smith(2)/gold
+date(3)/F06.4(28) BELOW the cutoff, themes "the claim"(76)/claimant(82)/Long COVID(90) ABOVE.
+- **B. Smith property HOLDS unconditionally** — grounded ≤ text < cutoff, so a discriminator can NEVER
+  invert to a theme (the CRQ-001 lever can't flip via B. Smith). Verified.
+- **Adversarial fix (MED):** the cutoff was `0.4 × total_chunks` (=52) but weight is the *grounded*
+  degree (≤ text degree), and audition grounding was ~34-54% — at which rates all three THEMES would fall
+  below 52 and mis-flag as discriminators (the lever inverting the wrong way). Changed to
+  **`0.4 × max-grounded-degree`** (relative to the run's actual distribution) — robust at any grounding
+  rate, with a regression test (`test_calibration_robust_to_low_grounding_rate`) that fails under the old
+  formula. Gate also hardened against a None output value.
+- **TODO (first real grounded run / re-audition):** re-validate the 0.4 fraction on ACTUAL grounded
+  degrees — the calibration is currently on the text-occurrence proxy. The 28-vs-76 anchor separation is
+  clean for codes/dates; some real clinical/role surfaces (RTW, fatigue, brain fog) crowd the cutoff —
+  inherently borderline, tunable via the knob; the named anchors are safe.
+
 ## Step-7 note (gold-floor is ENTITY-LEVEL under record_type=entity_type)
 
 Joe confirmed: because each typed entity is its OWN record (record_type=entity_type), the gold-note
