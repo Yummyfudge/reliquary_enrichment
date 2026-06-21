@@ -1,0 +1,114 @@
+# Codex Refactor — Engineer Log
+
+Running log for the codex/meaning refactor (brief: `notes/engineer-brief-codex-refactor.md`).
+Engineer → Architect. Records PRE-FLIGHT results, brief↔code discrepancies the mapping pass
+surfaced, and decisions taken. Source verified unchanged since `794d715` (HEAD `25f1cc5` only
+adds the briefs); all brief line-refs valid.
+
+## PRE-FLIGHT (§4) — COMPLETE
+
+- **v0 baseline tagged:** `v0-baseline` → `794d715` (annotated). Gold-note floor is the
+  cross-baseline continuity anchor.
+- **segment_index DB check (§4.2) — RESOLVED:** read-only query on `context_reliquary.claim_chunks`
+  (5119 rows, 2 docs). `char_start_offset` is **degenerate** — constant `0` for every row
+  (5117/5117 adjacent pairs tie; gold note `89503c71` char_start=0), so it carries **no ordering
+  signal**. `segment_index` IS the intra-document ordering key; `_NEIGHBORS` needs **no logic fix**.
+  Caveat for §8 adjacency: `segment_index` has 77 `(document, segment_index)` tie-groups + 75 NULL
+  rows corpus-wide — adjacency candidate-gen must dedupe/bound accordingly. Resolution written into
+  the flagged NOTE in `postgres/fragment_reader.py`.
+- **Migrations authored + verified clean (up+down) on a throwaway schema replica (zero prod
+  contact), 8/8 checks pass:**
+  - `006_codex_entities_add_location` — drops/re-adds `codex_entities_type_chk` with `location`.
+  - `007_enrichment_meaning_local_fact` — ADD UNIQUE(source_chunk_id) + FK→claim_chunks (mirrors
+    005) + DROP COLUMN questions_answered.
+  - `008_entity_refs_gin_index` — see FLAG-1 (idempotent backstop; down is a no-op).
+  - Probe DDL: `location` mirrored into `probe/schema.py` `_tables_ddl` codex_entities CHECK
+    (additive; the claim_relevance drop + meaning table + GIN are coupled to build step 5.5).
+
+## FLAGS for the Architect (brief↔code discrepancies found while mapping)
+
+- **FLAG-1 — migration 008 is a prod NO-OP.** Prod already creates the entity_refs GIN index in
+  `schema/001_enrichment_records.up.sql:63-64` (`idx_enrichment_records_entity_refs`). 008 was
+  authored as an **idempotent backstop** (`CREATE INDEX IF NOT EXISTS`, down = no-op). The real gap
+  is the **probe** schema, which lacks it — that GIN goes into `probe/schema.py` at step 5.5. Brief
+  §5.2/§6 premise that prod lacks the index is incorrect.
+
+- **FLAG-2 — claim_relevance touch-point list (§5.3) is INCOMPLETE; the probe extraction-probe stack
+  couples to the §6 probe-DDL drop.** Beyond the §5.3 sites, `claim_relevance` also lives at:
+  `probe/scoring.py:74` (`_haystack` reads `rec.get('claim_relevance')`), `probe/scoring.py:153`
+  (`load_probe_records` SELECT), `probe/runner.py:193`, `probe/extraction.py:60/76/117`
+  (`ExtractionProposal` — a **separate** dataclass from `EnrichmentRecord`; dropping the models.py
+  field does NOT break these). **Coupling:** §6 drops `claim_relevance` from the probe records DDL →
+  `probe/scoring.py:153` SELECT becomes a runtime breaker **for the retired single-pass extraction
+  probe CLI** (not exercised by multipass). **Proposed resolution (at build step 5.5):** drop the
+  probe-DDL column AND strip `claim_relevance` from `probe/scoring.py:74,153` (minimal coupled fix);
+  leave `probe/extraction.py`/`runner.py` (own dataclass, write through write_enrichment binds NULL).
+  Confirm before executing.
+
+- **FLAG-3 — existing TESTS that break are not enumerated by the brief (they are TDD acceptance
+  rewrites).** Collection/run breakers once passes are renamed/deleted + claim_relevance/
+  questions_answered removed: `tests/test_multipass.py` (imports L12/15/16; tests L40,124-155,
+  215-234,243-253), `tests/test_multipass_e2e_integration.py` (L51,54,86,87,91),
+  `tests/test_multipass_review.py` (L20-25,36), `tests/test_write_enrichment.py` (L137,149),
+  `tests/test_probe_scoring.py` (L22). Each gets rewritten red→green in its build step.
+
+- **FLAG-4 — 004 header reword ambiguity.** Brief §5.2 says reword 004's "interpreted significance"
+  comment, but 004 is an applied migration (D3 = don't rewrite in place). Resolution: left 004
+  byte-unchanged; the local-fact framing lives in the **007 header** instead. Confirm acceptable.
+
+- **Line drifts (edit by content, not line number):** write_enrichment build-site is **202** (not
+  200; "224" is a stray inside `_resolve_entities`, which has no claim_relevance); mcp.py payload is
+  **118** (not 117); record_store `26/66` are SQL continuation lines (no token — `sed` on
+  `claim_relevance` is safe, hits only 24/29/41/64/84).
+- **Path convention:** passes live under `src/reliquary_enrichment/multipass/passes/` (brief writes
+  `passes/...`). New `pass2_9_normalize.py` / `pass_link.py` go there; cli imports use
+  `reliquary_enrichment.multipass.passes.<module>`.
+
+## Build steps 1–3 — DONE (TDD red→green; full default suite 146 green)
+
+- **vocabulary.py** — `ENTITY_TYPES` (7) + `SEED_RELATIONS` as a literal re-export of
+  `link_events.SEED_RELATIONS` (asserted by identity). 6 tests.
+- **parsing.py validators** — `validate_entity_proposal` (closed-vocab/quote/surface),
+  `validate_link_proposal` (ADVISORY-on-relation: accepts any non-empty relation, flags off-seed
+  via `emergent`, rejects only on structural shape). Both reject-to-None, never raise. 12 tests.
+- **entities.py canonicalizers** — date→ISO (strict month tokens + `-`/`/`/`.` separators,
+  no guess on ambiguity), code (upper/whitespace), location/document/provision, stronger actor;
+  `resolve_or_create` alias-not-merge body untouched. 13 tests.
+
+### Adversarial verification (3-lens workflow, executed break-attempts) — 1 real bug fixed
+
+- **FIXED (correctness):** `normalize_date` over-collapsed a NON-month word whose first 3 letters
+  matched a month (`"Marbles 5 2025"` → `2025-03-05`, silently merging onto the real `March 5 2025`
+  node). Now requires the WHOLE token be a real month (`_month_num`). Regression-tested.
+- **FIXED (recall):** widened date separators — year-first `2025/02/18` / `2025.02.18` and
+  M/D/Y `.` separators now reach ISO. Zero new over-collapse.
+- **FLAG-5 (deferred, documented):** `safe_json_array`/`safe_json_object` RAISE `TypeError` on
+  truthy non-str input (`7`, `nan`) despite their "never-raise floor" docstring — the `raw or ""`
+  guard only rescues falsy inputs. UNREACHABLE today (all callers pass the model's str reply) and
+  the functions are §5.1-KEEP / "byte-equivalent", so **left untouched**; raise with Architect if
+  the floor should be hardened (`raw if isinstance(raw,str) else ""`).
+- **FLAG-6 (deferred):** `normalize_code` strips all whitespace + uppercases (matches the brief's
+  `f06.4`→`F06.4`) but does not normalize punctuation (`F-06.4`/`F06,4` stay distinct) — conservative
+  (avoids merging `F06.4`/`F064`); 2-digit-year dates (`2/18/25`) are not century-expanded (a guess).
+  Both are dedup-recall gaps, not correctness bugs; deferred to curation.
+
+### FLAG-7 (gold-floor date vs corpus) — RESOLVED by Architect (brief @ 46d1733)
+
+I verified against the DB that the **gold note's own text (segment 15) contains NO date** — only
+`10/2023`; "Feb 18" / "2/18/2024" live in NEIGHBOR chunks; literal `2025-02-18` is not in the corpus
+near it. Architect confirmed this was an over-spec and corrected the brief:
+- **Hard FLOOR drops the date.** Gate = chunk `89503c71` grounds ≥1 record ON ITS OWN TEXT naming
+  `B. Smith` + the reversal content (Mental Health limitation / "place claim back"). `date=None` is
+  fine (matches what both audition candidates already grounded).
+- **The reversal date is a SOFT, linked/metadata entity (§8d)** — captured from the note's source
+  record, value **AS-IS** (do NOT assume `2025-02-18`; corpus suggests `2024-02-18` / bare `Feb 18`).
+  **TODO (at date-capture build):** pin the authoritative value and report back so the brief/notes
+  are corrected.
+- §8d required-edges + the §5.2 Pass-5 example were corrected to match (dated only when the chunk's
+  own text carries a date). Cleared to build the floor at step 7/12 on the corrected spec.
+
+## Build order (§11) — in progress
+1–3 vocabulary → validators → canonicalizers · 4–5 multi-record extract → normalize ·
+5.5–6.5 read-APIs → discriminative-weight → gate · 7–8 linker → MeaningWriter ·
+9–10 walker → persistence/throws/wiring · 11 needle (DEFERRED). §5 isolation + grounding spine
+untouched throughout; gold-note FLOOR runs first.

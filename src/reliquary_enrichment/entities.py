@@ -2,15 +2,19 @@ from __future__ import annotations
 
 """Codex Entity resolution — code materializes Entities; the model never types one.
 
-Normalize a judge-validated surface form (actor name / event_date) to a canonical key and
-resolve-or-create the Entity (dedupe key = entity_type + canonical). Used by
-write_enrichment step 9 (actor/date) and link_events §6 (event, from same_event).
+Normalize a judge-validated surface form (actor / date / code / location / document / provision)
+to a canonical key and resolve-or-create the Entity (dedupe key = entity_type + canonical). Used
+by write_enrichment step 9 (resolves EVERY typed entity) and link_events §6 (event, from same_event).
 
-Normalization is MINIMAL by decision (codex §9-B): exact match on a lightly-normalized
-canonical, with observed surface forms recorded as aliases. Fuzzy canonicalization
-("B. Smith" vs "Bruce Smith") is a later, curation-gated task — we never silently merge.
+Canonicalization is per-type and REAL (brief §5.2 — the CRQ-001 dedupe lever): date -> ISO-8601,
+code -> upper/whitespace-stripped, location/document/provision -> whitespace-normalized, actor ->
+whitespace/separator-normalized. It stays alias-not-merge: surface variants of the SAME entity
+collapse to one canonical (variants recorded as aliases), while GENUINELY ambiguous identities
+("B. Smith" vs "Bruce Smith"; an all-numeric date that could be M/D or D/M) are NEVER silently
+merged — they keep distinct canonicals and are flagged for curation downstream (pass2_9_normalize).
 """
 
+import datetime as _dt
 import re
 
 from reliquary_enrichment.models import Entity, EntityRef
@@ -18,18 +22,109 @@ from reliquary_enrichment.stores import EntityStore
 
 _WS = re.compile(r"\s+")
 
+# Valid month tokens: full names + 3-letter abbreviations (+ 'sept'). The WHOLE captured word
+# must match — a non-month word that merely STARTS with a month prefix (e.g. "Marbles" -> "mar")
+# must NOT be read as a date, or a non-date surface would silently merge onto a real date node.
+_MONTH_TOKENS: dict[str, int] = {}
+for _i, (_abbr, _full) in enumerate((
+    ("jan", "january"), ("feb", "february"), ("mar", "march"), ("apr", "april"),
+    ("may", "may"), ("jun", "june"), ("jul", "july"), ("aug", "august"),
+    ("sep", "september"), ("oct", "october"), ("nov", "november"), ("dec", "december"),
+), start=1):
+    _MONTH_TOKENS[_abbr] = _i
+    _MONTH_TOKENS[_full] = _i
+_MONTH_TOKENS["sept"] = 9
 
-def normalize_actor(surface: str) -> str:
-    """Collapse whitespace; keep surface casing/punctuation (minimal — codex §9-B)."""
-    return _WS.sub(" ", surface).strip()
+# Separators accepted: '-', '/', '.'. Year-first (ISO order) vs year-last (M/D or D/M) are
+# distinguished by which end carries the 4-digit year. 2-digit years are NOT expanded (the century
+# is a guess) — they stay a distinct surface, never silently bucketed into a guessed year.
+_ISO_RE = re.compile(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$")
+_NUM_RE = re.compile(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$")
+# "Feb 18 2025" / "February 18, 2025" / "Feb 18, 2025"
+_MDY_NAME_RE = re.compile(r"^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$")
+# "18 Feb 2025" / "18 February, 2025"
+_DMY_NAME_RE = re.compile(r"^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})$")
+
+
+def _month_num(word: str) -> int | None:
+    """Month number for a FULL month token (name or 3-letter abbrev), else None — strict, so a word
+    that merely starts with a month prefix ('Marbles') is not mistaken for a month."""
+    return _MONTH_TOKENS.get(word.strip().rstrip(".").lower())
+
+
+def _iso(year, month, day) -> str | None:
+    """Build an ISO date string, or None if (year, month, day) is not a real calendar date."""
+    try:
+        return _dt.date(int(year), int(month), int(day)).isoformat()
+    except (ValueError, TypeError):
+        return None
 
 
 def normalize_date(surface: str) -> str:
-    """Trim a normalized date string. The model already normalized + the judge verified it."""
-    return surface.strip()
+    """Canonicalize a date surface to ISO-8601 (YYYY-MM-DD) when UNAMBIGUOUS; otherwise return the
+    cleaned surface unchanged (never guess — an ambiguous date must not silently merge).
+
+    Handles ISO, ``M/D/Y`` / ``D/M/Y`` (disambiguated only when one component is > 12), and
+    month-name forms (``Feb 18 2025`` / ``February 18, 2025`` / ``18 Feb 2025``).
+    """
+    s = _WS.sub(" ", surface).strip()
+    m = _ISO_RE.match(s)
+    if m:
+        return _iso(*m.groups()) or s
+    m = _MDY_NAME_RE.match(s)
+    if m:
+        mon = _month_num(m.group(1))
+        return (_iso(m.group(3), mon, m.group(2)) or s) if mon else s
+    m = _DMY_NAME_RE.match(s)
+    if m:
+        mon = _month_num(m.group(2))
+        return (_iso(m.group(3), mon, m.group(1)) or s) if mon else s
+    m = _NUM_RE.match(s)
+    if m:
+        a, b, y = int(m.group(1)), int(m.group(2)), m.group(3)
+        if a > 12 and b <= 12:        # first component is the day -> D/M/Y
+            return _iso(y, b, a) or s
+        if b > 12 and a <= 12:        # second component is the day -> M/D/Y
+            return _iso(y, a, b) or s
+        return s                       # both <=12 (ambiguous) or both >12 (invalid) -> no guess
+    return s
 
 
-_NORMALIZERS = {"actor": normalize_actor, "date": normalize_date}
+def normalize_code(surface: str) -> str:
+    """Canonical code: strip ALL whitespace + uppercase (``f06.4`` / ``F 06.4`` -> ``F06.4``)."""
+    return _WS.sub("", surface).strip().upper()
+
+
+def normalize_location(surface: str) -> str:
+    """Collapse whitespace; keep casing (conservative — distinct places must not merge)."""
+    return _WS.sub(" ", surface).strip()
+
+
+def normalize_document(surface: str) -> str:
+    """Collapse whitespace; keep casing (conservative — distinct documents must not merge)."""
+    return _WS.sub(" ", surface).strip()
+
+
+def normalize_provision(surface: str) -> str:
+    """Collapse whitespace; keep casing (conservative — distinct provisions must not merge)."""
+    return _WS.sub(" ", surface).strip()
+
+
+def normalize_actor(surface: str) -> str:
+    """Collapse whitespace and strip surrounding separators (``B. Smith:`` -> ``B. Smith``); keep
+    casing/identity. Alias-not-merge: distinct names ("B. Smith" vs "Bruce Smith") are NEVER
+    collapsed — fuzzy name identity is a curation-gated task (codex §9-B)."""
+    return _WS.sub(" ", surface).strip().strip(" :;,")
+
+
+_NORMALIZERS = {
+    "actor": normalize_actor,
+    "date": normalize_date,
+    "code": normalize_code,
+    "location": normalize_location,
+    "document": normalize_document,
+    "provision": normalize_provision,
+}
 
 
 class EntityResolver:
