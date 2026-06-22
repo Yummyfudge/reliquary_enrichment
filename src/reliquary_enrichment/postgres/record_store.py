@@ -13,6 +13,32 @@ from uuid import UUID
 from reliquary_enrichment.models import EnrichmentRecord, EntityRef
 from reliquary_enrichment.postgres.connection import DEFAULT_WRITE_SCHEMA, connect, qualified
 
+# claim_relevance is gone (codex refactor §5.3 — whole-claim significance relocated). The prod
+# column is retained (additive discipline) but never written; refactored-run rows are NULL there,
+# and the probe records table drops the column entirely (isolation_schema).
+_REC_COLS = (
+    "record_id, record_type, tier, fields, actor, event_date, "
+    "confidence, source_chunk_id, char_start, char_end, page, document, "
+    "evidence_span, provenance_validation, entity_refs, flagged, supersedes"
+)
+
+
+def _row_to_record(row: dict) -> EnrichmentRecord:
+    refs = [
+        EntityRef(r["role"], r["entity_id"], r["entity_type"], r["canonical"])
+        for r in (row["entity_refs"] or [])
+    ]
+    return EnrichmentRecord(
+        record_type=row["record_type"], tier=row["tier"],
+        source_chunk_id=str(row["source_chunk_id"]), char_start=row["char_start"],
+        char_end=row["char_end"], evidence_span=row["evidence_span"],
+        provenance_validation=row["provenance_validation"], fields=row["fields"] or {},
+        actor=row["actor"], event_date=row["event_date"], confidence=row["confidence"],
+        page=row["page"], document=row["document"], entity_refs=refs,
+        flagged=row["flagged"], supersedes=str(row["supersedes"]) if row["supersedes"] else None,
+        record_id=str(row["record_id"]),
+    )
+
 
 class PostgresEnrichmentRecordStore:
     def __init__(self, *, schema: str = DEFAULT_WRITE_SCHEMA) -> None:
@@ -21,12 +47,12 @@ class PostgresEnrichmentRecordStore:
     def insert(self, record: EnrichmentRecord) -> str:
         sql = f"""
             INSERT INTO {self._table} (
-                record_id, record_type, tier, fields, actor, event_date, claim_relevance,
+                record_id, record_type, tier, fields, actor, event_date,
                 confidence, source_chunk_id, char_start, char_end, page, document,
                 evidence_span, provenance_validation, entity_refs, flagged, supersedes
             ) VALUES (
                 %(record_id)s, %(record_type)s, %(tier)s, %(fields)s, %(actor)s,
-                %(event_date)s, %(claim_relevance)s, %(confidence)s, %(source_chunk_id)s,
+                %(event_date)s, %(confidence)s, %(source_chunk_id)s,
                 %(char_start)s, %(char_end)s, %(page)s, %(document)s, %(evidence_span)s,
                 %(provenance_validation)s, %(entity_refs)s, %(flagged)s, %(supersedes)s
             )
@@ -38,7 +64,6 @@ class PostgresEnrichmentRecordStore:
             "fields": json.dumps(record.fields),
             "actor": record.actor,
             "event_date": record.event_date,
-            "claim_relevance": record.claim_relevance,
             "confidence": record.confidence,
             "source_chunk_id": record.source_chunk_id,
             "char_start": record.char_start,
@@ -60,29 +85,51 @@ class PostgresEnrichmentRecordStore:
             UUID(str(record_id))
         except (ValueError, TypeError):
             return None
-        sql = f"""
-            SELECT record_id, record_type, tier, fields, actor, event_date, claim_relevance,
-                   confidence, source_chunk_id, char_start, char_end, page, document,
-                   evidence_span, provenance_validation, entity_refs, flagged, supersedes
-            FROM {self._table} WHERE record_id = %(record_id)s
-        """
         with connect() as conn, conn.cursor() as cur:
-            cur.execute(sql, {"record_id": record_id})
+            cur.execute(f"SELECT {_REC_COLS} FROM {self._table} WHERE record_id = %(record_id)s",
+                        {"record_id": record_id})
             row = cur.fetchone()
-        if not row:
-            return None
-        refs = [
-            EntityRef(r["role"], r["entity_id"], r["entity_type"], r["canonical"])
-            for r in (row["entity_refs"] or [])
-        ]
-        return EnrichmentRecord(
-            record_type=row["record_type"], tier=row["tier"],
-            source_chunk_id=str(row["source_chunk_id"]), char_start=row["char_start"],
-            char_end=row["char_end"], evidence_span=row["evidence_span"],
-            provenance_validation=row["provenance_validation"], fields=row["fields"] or {},
-            actor=row["actor"], event_date=row["event_date"],
-            claim_relevance=row["claim_relevance"], confidence=row["confidence"],
-            page=row["page"], document=row["document"], entity_refs=refs,
-            flagged=row["flagged"], supersedes=str(row["supersedes"]) if row["supersedes"] else None,
-            record_id=str(row["record_id"]),
-        )
+        return _row_to_record(row) if row else None
+
+    # --- read APIs: entity -> record reverse lookup via jsonb-containment (no join table) ---
+    def records_by_entity(self, entity_id: str) -> list[EnrichmentRecord]:
+        probe = json.dumps([{"entity_id": entity_id}])
+        with connect() as conn, conn.cursor() as cur:
+            # ORDER BY record_id: a stable, deterministic order so the codex walker yields reproducible
+            # (and fake-matching) cited paths — without it Postgres scan order is arbitrary across
+            # VACUUM/churn and could diverge from the fake on equal-length paths (step-9 review MED).
+            cur.execute(f"SELECT {_REC_COLS} FROM {self._table} "
+                        "WHERE entity_refs @> %(probe)s::jsonb ORDER BY record_id", {"probe": probe})
+            rows = cur.fetchall()
+        return [_row_to_record(r) for r in rows]
+
+    def chunks_by_entity(self, entity_id: str) -> list[str]:
+        probe = json.dumps([{"entity_id": entity_id}])
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT DISTINCT source_chunk_id FROM {self._table} "
+                        "WHERE entity_refs @> %(probe)s::jsonb", {"probe": probe})
+            rows = cur.fetchall()
+        return [str(r["source_chunk_id"]) for r in rows]
+
+    def records_by_chunk(self, chunk_id: str) -> list[EnrichmentRecord]:
+        # The walker's chunk-seed (entities_of(chunk)). Plain equality on the source_chunk_id column,
+        # served by idx_enrichment_records_source_chunk (migration 001). Guard a non-UUID chunk_id the way
+        # get() does (the column is uuid; a malformed value would RAISE) so it returns [] like the fake —
+        # not a fake-vs-prod divergence (step-9 review MED). ORDER BY record_id for a deterministic walk.
+        try:
+            UUID(str(chunk_id))
+        except (ValueError, TypeError):
+            return []
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT {_REC_COLS} FROM {self._table} "
+                        "WHERE source_chunk_id = %(c)s ORDER BY record_id", {"c": chunk_id})
+            rows = cur.fetchall()
+        return [_row_to_record(r) for r in rows]
+
+    def cooccurrence(self, entity_id: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for record in self.records_by_entity(entity_id):       # Python-side for fake parity
+            for ref in record.entity_refs:
+                if ref.entity_id != entity_id:
+                    counts[ref.entity_id] = counts.get(ref.entity_id, 0) + 1
+        return counts

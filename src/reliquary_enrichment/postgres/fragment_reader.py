@@ -20,9 +20,14 @@ _SELECT = """
     WHERE claim_chunk_id = %(chunk_id)s
 """
 
-# Neighbors: same document, adjacent by segment_index (Pass-3 cross-link context).
-# NOTE (flagged): assumes segment_index is the intra-document ordering key; confirm vs
-# char_start_offset with the Architect before relying on neighbor windows in a real pass.
+# Neighbors: same document, adjacent by segment_index (cross-link context; §8 doc-adjacency).
+# RESOLVED (read-only DB check, codex-refactor PRE-FLIGHT §4.2): segment_index IS the
+# intra-document ordering key. char_start_offset is degenerate — constant (0) for every row
+# (5117/5117 adjacent pairs tie; gold note 89503c71 char_start=0), so it carries no ordering
+# signal and must NOT be used as the key. Caveat for §8 adjacency candidate-links:
+# segment_index has ties (77 (document, segment_index) groups share a value) and 75 NULL rows
+# corpus-wide, so a window may include same-segment chunks and NULL-segment chunks are absent
+# from neighbor windows — bound/dedupe adjacency candidates accordingly.
 _NEIGHBORS = """
     WITH anchor AS (
         SELECT document_name, segment_index

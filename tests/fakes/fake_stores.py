@@ -18,6 +18,28 @@ class FakeRecordStore:
     def get(self, record_id: str) -> EnrichmentRecord | None:
         return self.records.get(record_id)
 
+    # --- read APIs (mirror the Postgres jsonb-containment semantics + ORDER BY record_id; §5.2) ---
+    def records_by_entity(self, entity_id: str) -> list[EnrichmentRecord]:
+        return sorted((r for r in self.records.values()
+                       if any(ref.entity_id == entity_id for ref in r.entity_refs)),
+                      key=lambda r: r.record_id)
+
+    def chunks_by_entity(self, entity_id: str) -> list[str]:
+        # DISTINCT source_chunk_ids (an entity cited by 2 records in one chunk counts once).
+        return list(dict.fromkeys(r.source_chunk_id for r in self.records_by_entity(entity_id)))
+
+    def records_by_chunk(self, chunk_id: str) -> list[EnrichmentRecord]:
+        return sorted((r for r in self.records.values() if r.source_chunk_id == chunk_id),
+                      key=lambda r: r.record_id)
+
+    def cooccurrence(self, entity_id: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for r in self.records_by_entity(entity_id):
+            for ref in r.entity_refs:
+                if ref.entity_id != entity_id:
+                    counts[ref.entity_id] = counts.get(ref.entity_id, 0) + 1
+        return counts
+
 
 class FakeEntityStore:
     def __init__(self) -> None:
@@ -38,6 +60,20 @@ class FakeEntityStore:
 
     def add_alias(self, entity_id: str, alias: str) -> None:
         self.entities[entity_id].aliases.append(alias)
+
+    # --- read APIs + the discriminative-weight write path (§5.2/§9) ---
+    def get(self, entity_id: str) -> Entity | None:
+        return self.entities.get(entity_id)
+
+    def entities_of_type(self, entity_type: str) -> list[Entity]:
+        return [e for e in self.entities.values() if e.entity_type == entity_type]
+
+    def set_entity_flags(self, entity_id: str, *, weight: int, is_theme: bool) -> None:
+        # the ONLY post-insert entity-metadata mutation besides event clustering; PATCH (don't
+        # clobber member_records/merged_into) — mirrors the Postgres jsonb_set.
+        meta = self.entities[entity_id].metadata
+        meta["weight"] = weight
+        meta["is_theme"] = is_theme
 
     # --- event clustering ---
     def event_for_record(self, record_id: str) -> Entity | None:
@@ -65,3 +101,18 @@ class FakeLinkStore:
     def insert(self, link: Link) -> str:
         self.links[link.link_id] = link
         return link.link_id
+
+    # --- read APIs (the codex walker's edge traversal; §5.2; ORDER BY link_id for fake==prod paths) ---
+    def links_for_record(self, record_id: str) -> list[Link]:
+        return sorted((l for l in self.links.values()
+                       if l.record_a == record_id or l.record_b == record_id),
+                      key=lambda l: l.link_id)
+
+    def neighbors_via_links(self, record_id: str) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        for l in self.links.values():
+            if l.record_a == record_id:
+                out.append((l.relation, l.record_b))
+            elif l.record_b == record_id:
+                out.append((l.relation, l.record_a))
+        return out

@@ -97,7 +97,6 @@ def register_tools(mcp, *, services: dict[str, Any] | None = None) -> None:
         fields: Annotated[dict | None, "Structured meaning, shape per record_type."] = None,
         actor: Annotated[str | None, "Actor name; judge-verified vs the span; resolved to an Entity."] = None,
         event_date: Annotated[str | None, "Normalized date; judge-verified; resolved to an Entity."] = None,
-        claim_relevance: Annotated[str | None, "Why it matters to the denial (interpretation)."] = None,
         confidence: Annotated[float | None, "0..1."] = None,
         chunk_id: Annotated[str | None, "Optional echoed chunk_id — a cross-check ONLY, never the source of truth."] = None,
         workstream_id: Annotated[str, "Session/workstream key for the handle map."] = _DEFAULT_WS,
@@ -115,7 +114,7 @@ def register_tools(mcp, *, services: dict[str, Any] | None = None) -> None:
             "char_start": char_start, "char_end": char_end,
             "chunk_handle": chunk_handle, "fields": fields or {},
             "actor": actor, "event_date": event_date,
-            "claim_relevance": claim_relevance, "confidence": confidence,
+            "confidence": confidence,
         }
         if chunk_id is not None:
             payload["chunk_id"] = chunk_id

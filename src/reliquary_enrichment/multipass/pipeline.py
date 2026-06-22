@@ -43,6 +43,10 @@ class Pipeline:
         self._interval = status_interval_s
 
     def run(self) -> dict[str, PassResult]:
+        # Give passes the heartbeat sink: a whole-state (process_all) pass runs as ONE long blocking call,
+        # so without an INTERNAL pulse a slow link/meaning pass goes silent and reads as a hang (it isn't).
+        # Long process_all passes use ctx.extras["emit"] to report candidate progress; cheap passes ignore it.
+        self._ctx.extras.setdefault("emit", self._emit)
         results: dict[str, PassResult] = {}
         total = len(self._chunks)
         n = len(self._passes)

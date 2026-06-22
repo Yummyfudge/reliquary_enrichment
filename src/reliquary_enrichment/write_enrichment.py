@@ -25,6 +25,10 @@ from reliquary_enrichment.stores import EnrichmentRecordStore
 
 _TIERS = {t.value for t in Tier}
 
+# Typed entities carried in a record's `fields` that resolve to Codex Entities (besides the
+# dedicated actor/event_date payload slots). For these, the EntityRef.role IS the entity_type.
+_FIELD_ENTITY_TYPES = ("code", "location", "document", "provision")
+
 
 @dataclass(frozen=True, slots=True)
 class _Payload:
@@ -39,7 +43,6 @@ class _Payload:
     fields: dict
     actor: str | None
     event_date: str | None
-    claim_relevance: str | None
     confidence: float | None
 
 
@@ -87,7 +90,7 @@ def _validate(payload: dict) -> _Payload:
         if not (0.0 <= float(confidence) <= 1.0):
             fail("confidence must be in [0,1]")
 
-    for k in ("actor", "event_date", "claim_relevance", "chunk_handle", "chunk_id"):
+    for k in ("actor", "event_date", "chunk_handle", "chunk_id"):
         v = payload.get(k)
         if v is not None and not isinstance(v, str):
             fail(f"{k} must be a string when present")
@@ -102,7 +105,6 @@ def _validate(payload: dict) -> _Payload:
         fields=fields,
         actor=payload.get("actor"),
         event_date=payload.get("event_date"),
-        claim_relevance=payload.get("claim_relevance"),
         confidence=float(confidence) if confidence is not None else None,
     )
 
@@ -118,7 +120,7 @@ def render_record_claim(p: _Payload) -> str:
     ("status_change"), not a value the span must literally contain. Including it made the
     judge bounce every fact whose record_type words weren't in the span (surfaced by the
     extraction probe against the real judge; the fake-judge unit tests couldn't catch it).
-    Only real asserted values (actor / date / fields / relevance) are grounded.
+    Only real asserted values (actor / date / fields) are grounded.
     """
     parts = []
     if p.actor:
@@ -127,8 +129,6 @@ def render_record_claim(p: _Payload) -> str:
         parts.append(f"event_date: {p.event_date}")
     if p.fields:
         parts.append(f"details: {json.dumps(p.fields, ensure_ascii=False, sort_keys=True)}")
-    if p.tier is Tier.INTERPRETATION and p.claim_relevance:
-        parts.append(f"relevance: {p.claim_relevance}")
     # Degenerate case (no asserted values): describe the record type without demanding it
     # appear literally in the span.
     return "; ".join(parts) if parts else f"the span records a {p.record_type} event"
@@ -187,7 +187,8 @@ class WriteEnrichment:
             },
         )
 
-        # Step 9: resolve judge-validated actor/event_date to Codex Entities.
+        # Step 9: resolve EVERY judge-validated typed entity to Codex Entities
+        # (actor/date from slots; code/location/document/provision from fields).
         record = EnrichmentRecord(
             record_type=p.record_type,
             tier=str(p.tier),
@@ -199,7 +200,6 @@ class WriteEnrichment:
             fields=p.fields,
             actor=p.actor,
             event_date=p.event_date,
-            claim_relevance=p.claim_relevance,
             confidence=p.confidence,
             page=fragment.page,
             document=fragment.document,
@@ -221,6 +221,9 @@ class WriteEnrichment:
         }
 
     def _resolve_entities(self, p: _Payload, record_id: str) -> list:
+        """Resolve every judge-validated typed entity to a Codex Entity + return its EntityRefs
+        (brief §5.2): actor + date from the dedicated slots, code/location/document/provision from
+        `fields`. resolve_or_create's alias-not-merge contract is unchanged."""
         refs = []
         if p.actor:
             entity = self._entities.resolve_or_create(
@@ -232,4 +235,11 @@ class WriteEnrichment:
                 "date", p.event_date, first_seen_record=record_id
             )
             refs.append(self._entities.ref_for("event_date", entity))
+        for etype in _FIELD_ENTITY_TYPES:
+            value = p.fields.get(etype)
+            if isinstance(value, str) and value.strip():
+                entity = self._entities.resolve_or_create(
+                    etype, value, first_seen_record=record_id
+                )
+                refs.append(self._entities.ref_for(etype, entity))
         return refs

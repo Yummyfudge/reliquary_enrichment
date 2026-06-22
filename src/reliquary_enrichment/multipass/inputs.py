@@ -3,7 +3,7 @@ from __future__ import annotations
 """Input loaders — turn the test set into ChunkRefs the pipeline consumes.
 
 Two sources, both read-only over ``claim_chunks`` (the probe role's corpus access):
-  * the frozen 131-chunk slice (``probe/slice/chunk_ids.txt``), source="slice".
+  * the frozen 131-chunk slice (``multipass/slice/chunk_ids.txt``), source="slice".
   * a page RANGE, source="pdf:<name>" — the two test "PDFs" Joe named
     (Aflac_claim_file_400-426, _575-580) are page ranges of the same claim file whose text is
     already chunked in claim_chunks, so v0 feeds those ranges from the corpus (same chunking as
@@ -22,8 +22,11 @@ from reliquary_enrichment.postgres.connection import connect
 
 _PDF_NAME = re.compile(r"(\d+)-(\d+)")
 
+# The frozen slice lives inside this package (codex refactor §13 — self-contained, no probe/).
+_DEFAULT_SLICE = str(Path(__file__).resolve().parent / "slice" / "chunk_ids.txt")
 
-def load_slice_chunks(slice_path: str | Path = "probe/slice/chunk_ids.txt") -> list[ChunkRef]:
+
+def load_slice_chunks(slice_path: str | Path = _DEFAULT_SLICE) -> list[ChunkRef]:
     """Load the frozen slice as ChunkRefs (source='slice'), in the slice's file order."""
     ids = [
         line.split()[0]
@@ -43,7 +46,7 @@ def load_page_range_chunks(name: str, lo: int, hi: int) -> list[ChunkRef]:
 
 
 def assemble_inputs(
-    *, slice_path: str | Path = "probe/slice/chunk_ids.txt", pdf_filenames: tuple[str, ...] = ()
+    *, slice_path: str | Path = _DEFAULT_SLICE, pdf_filenames: tuple[str, ...] = ()
 ) -> list[ChunkRef]:
     """The v0 test set: the slice + each PDF page-range, **deduped by chunk_id** (Joe's verify).
 

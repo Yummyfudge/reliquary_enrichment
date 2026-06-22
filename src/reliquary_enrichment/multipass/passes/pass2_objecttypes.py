@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-"""Pass 2 — object-types. Per chunk, what TYPES of records it holds (not the values).
+"""Pass 2 — object-types. Per chunk, WHICH closed-vocab entity types are present (not values).
 
-The model names the record/object types it SEES (e.g. status_change, medical_opinion, date,
-actor, question). Just the types — values are Pass 3's job. Output feeds 2.9's consolidation
-into one emergent schema.
+Names which of the FIXED closed entity types (``vocabulary.ENTITY_TYPES`` — actor / date / event /
+document / provision / code / location) the chunk contains. This per-chunk subset NARROWS Pass 3's
+multi-record extraction (Pass 3 sources its type list from the vocabulary, narrowed by this). Just
+the types present; values are Pass 3's job. Off-vocabulary names are dropped (no open vocabulary).
 """
 
 import re
@@ -12,24 +13,20 @@ from typing import Any
 
 from reliquary_enrichment.multipass.parsing import safe_json_array
 from reliquary_enrichment.multipass.pass_base import ChunkRef, Pass, PassContext, PassResult
+from reliquary_enrichment.multipass.vocabulary import ENTITY_TYPES
 
 _SYSTEM = (
-    "List the TYPES of records/objects present in this chunk of an insurance claim file — NOT "
-    "their values. Each type is a short snake_case name (e.g. status_change, medical_opinion, "
-    "date, actor, question, task, denial_reason). Reply with ONLY a JSON array of type-name "
-    "strings; [] if the chunk holds nothing structured."
+    "Which of these entity types are PRESENT in this chunk of an insurance claim file? The FIXED "
+    "vocabulary is exactly: actor, date, event, document, provision, code, location. Reply with "
+    "ONLY a JSON array naming the types present (a subset of that vocabulary, lowercased); [] if "
+    "the chunk holds none of them."
 )
 
-_SNAKE = re.compile(r"[^a-z0-9]+")
-
-
-def normalize_type(name: str) -> str:
-    """Lowercase + snake_case a type name so synonyms collide for 2.9 (e.g. 'Status Change')."""
-    return _SNAKE.sub("_", str(name).strip().lower()).strip("_")
+_NORM = re.compile(r"[^a-z0-9]+")
 
 
 def parse_type_list(content: str) -> list[str]:
-    """Defensively parse a JSON array of type-name strings; normalize + dedup (order-stable)."""
+    """Parse a JSON array of type names; keep ONLY closed-vocab types; normalize + dedup (stable)."""
     arr = safe_json_array(content or "")
     out: list[str] = []
     seen: set[str] = set()
@@ -37,8 +34,8 @@ def parse_type_list(content: str) -> list[str]:
         name = item if isinstance(item, str) else (item.get("name") if isinstance(item, dict) else None)
         if not name:
             continue
-        norm = normalize_type(name)
-        if norm and norm not in seen:
+        norm = _NORM.sub("_", str(name).strip().lower()).strip("_")
+        if norm in ENTITY_TYPES and norm not in seen:
             seen.add(norm)
             out.append(norm)
     return out

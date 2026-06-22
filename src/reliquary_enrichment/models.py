@@ -16,9 +16,9 @@ from uuid import UUID, uuid4
 class EntityRef:
     """A record's pointer at a Codex Entity (stored inside enrichment_records.entity_refs)."""
 
-    role: str          # which field this resolved from: "actor" | "event_date"
+    role: str          # which field this resolved from: actor | event_date | code | location | document | provision
     entity_id: str
-    entity_type: str   # "actor" | "date" | "event" | ...
+    entity_type: str   # closed vocab: actor | date | event | document | provision | code | location
     canonical: str
 
     def as_dict(self) -> dict:
@@ -48,7 +48,6 @@ class EnrichmentRecord:
     fields: dict = field(default_factory=dict)
     actor: str | None = None
     event_date: str | None = None
-    claim_relevance: str | None = None
     confidence: float | None = None
     page: int | None = None
     document: str | None = None

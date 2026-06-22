@@ -24,6 +24,24 @@ class EnrichmentRecordStore(Protocol):
         """Load a record by id (used by link_events to resolve record refs)."""
         ...
 
+    # --- read APIs: the entity->record reverse lookup (entity_refs is denormalized jsonb,
+    #     so these are jsonb-containment queries, NOT FK joins). §5.2.
+    def records_by_entity(self, entity_id: str) -> list[EnrichmentRecord]:
+        """All records whose entity_refs include entity_id."""
+        ...
+
+    def chunks_by_entity(self, entity_id: str) -> list[str]:
+        """Distinct source_chunk_ids of the records citing entity_id (the discriminative-weight count)."""
+        ...
+
+    def records_by_chunk(self, chunk_id: str) -> list[EnrichmentRecord]:
+        """All records grounded on a chunk (the codex walker's `entities_of(chunk)` seed; §5.4 #9)."""
+        ...
+
+    def cooccurrence(self, entity_id: str) -> dict[str, int]:
+        """For entities sharing a record with entity_id: other_entity_id -> count (excludes self)."""
+        ...
+
 
 class EntityStore(Protocol):
     """Resolve-or-create store for Codex Entities (dedupe key: entity_type + canonical)."""
@@ -37,6 +55,19 @@ class EntityStore(Protocol):
 
     def add_alias(self, entity_id: str, alias: str) -> None:
         """Record an observed surface form on an existing Entity (curation-safe)."""
+        ...
+
+    def get(self, entity_id: str) -> Entity | None:
+        """Load an Entity by id."""
+        ...
+
+    def entities_of_type(self, entity_type: str) -> list[Entity]:
+        """All Entities of a given closed-vocab type."""
+        ...
+
+    def set_entity_flags(self, entity_id: str, *, weight: int, is_theme: bool) -> None:
+        """Persist the discriminative weight + theme-flag into metadata (§9) — the ONLY post-insert
+        entity-metadata mutation besides event clustering (patch, never clobber)."""
         ...
 
     # --- Event clustering (same_event materialization; codex §6) -------------------
@@ -59,4 +90,12 @@ class LinkStore(Protocol):
     """Append-only store for cross-record Links."""
 
     def insert(self, link: Link) -> str:
+        ...
+
+    def links_for_record(self, record_id: str) -> list[Link]:
+        """All links touching record_id (as record_a or record_b)."""
+        ...
+
+    def neighbors_via_links(self, record_id: str) -> list[tuple[str, str]]:
+        """(relation, other_record_id) for each link touching record_id — the codex walker's hop."""
         ...

@@ -70,6 +70,30 @@ def test_happy_path_writes_byte_exact_span_and_canonical_id():
     assert stored.page == 7 and stored.document == "denial.pdf"  # provenance code-derived
 
 
+def test_resolve_entities_resolves_fields_carried_typed_entities():
+    # brief §5.2: _resolve_entities resolves EVERY typed entity — actor/date from slots AND
+    # code/location/document/provision carried in `fields` — each to a canonical Codex Entity.
+    tool, handle, records, entities, _ = build()
+    out = tool.write(
+        base_payload(handle, fields={"code": "f06.4", "location": "Atlanta GA"}),
+        workstream_id=WS,
+    )
+    assert out["ok"] is True
+    stored = records.records[out["record_id"]]
+    roles = {ref.role for ref in stored.entity_refs}
+    assert {"actor", "event_date", "code", "location"} <= roles   # all four resolved + ref'd
+    assert entities.find("code", "F06.4") is not None             # code canonicalized (uppercased)
+    assert entities.find("location", "Atlanta GA") is not None
+
+
+def test_claim_relevance_is_removed_from_the_record_model():
+    # §5.3 throw: claim_relevance (whole-claim significance) is gone from EnrichmentRecord entirely.
+    from dataclasses import fields as dc_fields
+
+    from reliquary_enrichment.models import EnrichmentRecord
+    assert "claim_relevance" not in {f.name for f in dc_fields(EnrichmentRecord)}
+
+
 # 2. 🔴 The 89503 regression ----------------------------------------------------------
 def test_89503_mangled_handle_never_stores_corrupted_id():
     tool, handle, records, _, _ = build()
@@ -132,10 +156,7 @@ def test_interpretation_grounded_but_not_literal_is_stored():
     judge = ConstantJudge(Verdict.GROUNDED)
     tool, handle, records, _, _ = build(judge=judge)
     out = tool.write(
-        base_payload(
-            handle, tier="interpretation",
-            claim_relevance="the reversal undercuts the stated denial rationale",
-        ),
+        base_payload(handle, tier="interpretation"),   # actor/date/fields carry the asserted values
         workstream_id=WS,
     )
     assert out["ok"] is True
@@ -146,7 +167,7 @@ def test_interpretation_contradiction_bounced():
     judge = ConstantJudge(Verdict.UNGROUNDED)
     tool, handle, records, _, _ = build(judge=judge)
     out = tool.write(
-        base_payload(handle, tier="interpretation", claim_relevance="the claim was never reversed"),
+        base_payload(handle, tier="interpretation"),
         workstream_id=WS,
     )
     assert out["ok"] is False and out["reason_code"] == "unsupported_interpretation"
