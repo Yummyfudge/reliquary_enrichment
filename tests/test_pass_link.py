@@ -112,6 +112,23 @@ def test_shared_themes_captured_but_does_not_influence_candidacy():
             == (cands2[0]["record_a"], cands2[0]["record_b"], cands2[0]["anchor"]))
 
 
+def test_link_pass_emits_candidate_heartbeat():
+    # the long process_all pass must PULSE (candidate i/N) via ctx.extras["emit"] so it never reads as a
+    # hang — the 10b "wedge" was actually a silent-but-working Pass 6 (deadlines firing, no heartbeat).
+    rare = _ent("rr", "actor", "B. Smith")
+    es, rs = _store_with([rare], [
+        _rec("r1", "c1", [("actor", "rr", "actor", "B. Smith")]),
+        _rec("r2", "c2", [("actor", "rr", "actor", "B. Smith")]),
+    ])
+    lines: list[str] = []
+    ctx = PassContext(model=None, model_name="f", extras={
+        "record_store": rs, "entity_store": es, "linker": FakeLinker(),
+        "link_proposer": lambda *a: {}, "emit": lines.append})
+    CrossChunkLinkPass().process_all([ChunkRef("c1", "B. Smith"), ChunkRef("c2", "B. Smith")], {}, ctx)
+    assert any("candidate pairs" in l for l in lines)             # start line (total + bounds)
+    assert any("Link pass | candidate" in l for l in lines)       # per-candidate pulse
+
+
 # --- (c) same_event PRECISION guard -----------------------------------------
 def test_same_event_guard_same_actor_different_dates_blocked():
     a = _rec("ra", "c1", [("actor", "s", "actor", "B. Smith")], date="2024-02-18")

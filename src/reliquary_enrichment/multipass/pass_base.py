@@ -20,8 +20,15 @@ from reliquary_enrichment.grounding.judge import LITELLM_BASE_URL
 from reliquary_enrichment.llm_http import post_json
 
 # Audition-2 §2 defaults carried forward (env-overridable per candidate).
+# DEADLINE AUDIT (10b): every model-call path is bounded by post_json's hard total_deadline + read_timeout
+# (llm_http.py) — the proposers (fill/link/meaning) all route through ModelClient.complete below, and the
+# grounding judge through LiteLLMGroundingJudge._call (its own 90s/60s bound). read_timeout is the hard
+# per-request SILENT-server catch (raises if no response byte for N s); total_deadline backstops slow-drip.
+# Backstop lowered 600 -> 300 so a sick backend fails ~2x faster while still clearing a full 4096-tok
+# generation (~100s at observed throughput). The read_timeout (min(deadline,120)) is unchanged — it must
+# exceed non-streaming generation time, so it is NOT lowered (that would false-timeout big extractions).
 MODEL_MAX_TOKENS: int = int(os.getenv("MULTIPASS_MAX_TOKENS", "4096"))
-MODEL_DEADLINE_S: float = float(os.getenv("MULTIPASS_DEADLINE_S", "600"))
+MODEL_DEADLINE_S: float = float(os.getenv("MULTIPASS_DEADLINE_S", "300"))
 
 
 @dataclass(frozen=True, slots=True)

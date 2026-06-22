@@ -415,6 +415,34 @@ failure is an env DB-privilege issue, not a regression). Fixed:
   `pass_errors` from `{"error":...}` outputs, emits a DEGRADED warning, and returns them. (+ `review.py`
   `_by_chunk` guards malformed jsonl.)
 
+## Step 10b — first real-corpus run: the "wedge" was a VISIBILITY gap (diagnosis + fix)
+
+Joe flagged 10b (big-thinker, probe_10b_bigthinker) as hung 3¼h on Pass 6's first LiteLLM call, with
+MODEL_DEADLINE_S=600 "not catching it" — the audition-2 silent-server hang, recurred. **Diagnosis (py-spy
++ live DB) corrected it: NOT a wedge.** The codex was growing live (links 629→631 in 25s); py-spy frames
+CHANGED between samples (proposer call, then judge call — iterating candidates, not stuck on one);
+threading.py:359 was the TIMED acquire; the judge call carries total_deadline=90s, the proposer 600s —
+both fire. `generate_candidates` over the live codex showed **868 candidate pairs**, and the run was at
+**~650/868 (~75%)** — Pass 6 was 3¼h of silent-but-WORKING grind.
+
+**Root cause: `process_all` passes emit NO heartbeat.** The Pipeline's per-chunk heartbeat doesn't apply to
+whole-state passes, so a long link/meaning pass runs as one blocking call and `progress.log` freezes when
+the prior pass ends — it reads exactly like a hang. The deadlines were a red herring (they fire).
+
+**Fix (TDD, 205 green):**
+- **Heartbeat for process_all passes** — Pipeline injects `ctx.extras["emit"]`; `CrossChunkLinkPass` pulses
+  `Link pass | candidate i/N | M grounded links` every 25 candidates (+ a start line with the candidate
+  count and bounds). A long pass can never again be mistaken for wedged.
+- **Deadline audit (Joe's ask) + tighten** — confirmed ALL five call paths are bounded: the proposers
+  (fill/link/meaning) route through `ModelClient.complete` → `post_json` (read_timeout=120s silent-catch +
+  total_deadline backstop); the judge through `LiteLLMGroundingJudge._call` (60s/90s). Lowered the
+  proposer backstop `MODEL_DEADLINE_S` 600→300 (a sick backend fails ~2× faster) while keeping
+  read_timeout=120 (it must exceed non-streaming generation time, else big extractions false-timeout).
+- The IN-FLIGHT 10b kept running the old code (source edits don't touch a live process) — it finishes on
+  its own; the fix lands for the remaining candidates and the verification re-run.
+- Follow-up flagged (not built): a consecutive-timeout CIRCUIT BREAKER so a genuinely dead backend aborts
+  Pass 6 fast instead of grinding 868 × read_timeout.
+
 ## Build order (§11) — in progress
 1–3 vocabulary → validators → canonicalizers · 4–5 multi-record extract → normalize ·
 5.5–6.5 read-APIs → discriminative-weight → gate · 7–8 linker → MeaningWriter ·

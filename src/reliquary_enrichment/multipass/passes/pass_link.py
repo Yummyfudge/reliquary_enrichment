@@ -148,12 +148,18 @@ class CrossChunkLinkPass(Pass):
         linker = ctx.extras["linker"]                       # LinkEvents
         propose = ctx.extras["link_proposer"]               # model-asserted semantic proposer
         ws = ctx.extras.get("workstream_id", "mp-link")
+        emit = ctx.extras.get("emit", lambda _m: None)      # heartbeat sink (this is the long process_all)
         text = {c.chunk_id: c.text for c in chunks}
 
         candidates, dry_run = generate_candidates(
             record_store, entity_store, fan_out_cap=self.fan_out_cap, max_candidates=self.max_candidates)
+        total = len(candidates)
+        emit(f"Link pass | {total} candidate pairs (fan_out<={self.fan_out_cap}, K<={self.max_candidates}, "
+             f"capped={dry_run['capped']}) | grounding one LLM call/pair...")
         links: list[dict] = []
-        for cand in candidates:
+        for i, cand in enumerate(candidates, 1):
+            if i % 25 == 0 or i == total:                   # pulse so a long link pass never reads as wedged
+                emit(f"Link pass | candidate {i}/{total} | {sum(1 for l in links if l.get('ok'))} grounded links")
             meta = {"record_a": cand["record_a"], "record_b": cand["record_b"],
                     "anchor": cand["anchor"], "shared_themes": cand["shared_themes"]}
             ra, rb = record_store.get(cand["record_a"]), record_store.get(cand["record_b"])
